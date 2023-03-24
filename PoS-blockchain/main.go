@@ -17,6 +17,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/joho/godotenv"
+	// "github.com/go-echarts/go-echarts/v2/opts"
 )
 
 // Block represents each 'item' in the blockchain
@@ -38,6 +39,9 @@ var candidateBlocks = make(chan Block)
 
 // announcements broadcasts winning validator to all nodes
 var announcements = make(chan string)
+
+//dictionary for block append counter
+var blockAppendDict map[string]int = make(map[string]int)
 
 var mutex = &sync.Mutex{}
 
@@ -140,6 +144,8 @@ func pickWinner() {
 				for _ = range validators {
 					announcements <- "\nwinning validator: " + lotteryWinner + "\n"
 				}
+				blockAppendDict[lotteryWinner] += 1;
+				fmt.Printf("Validator %s, number of times they have won: %d\n", lotteryWinner, blockAppendDict[lotteryWinner])
 				break
 			}
 		}
@@ -179,28 +185,28 @@ func handleConn(conn net.Conn) {
 		break
 	}
 
-	io.WriteString(conn, "\nEnter a new BPM:")
+	// io.WriteString(conn, "\nEnter a new BPM:")
 
-	scanBPM := bufio.NewScanner(conn)
+	// scanBPM := bufio.NewScanner(conn)
 
 	go func() {
 		for {
 			// take in BPM from stdin and add it to blockchain after conducting necessary validation
-			for scanBPM.Scan() {
-				bpm, err := strconv.Atoi(scanBPM.Text())
+			// for scanBPM.Scan() {
+				// bpm, err := strconv.Atoi(scanBPM.Text())
 				// if malicious party tries to mutate the chain with a bad input, delete them as a validator and they lose their staked tokens
-				if err != nil {
-					log.Printf("%v not a number: %v", scanBPM.Text(), err)
-					delete(validators, address)
-					conn.Close()
-				}
+				// if err != nil {
+				// 	log.Printf("%v not a number: %v", scanBPM.Text(), err)
+				// 	delete(validators, address)
+				// 	conn.Close()
+				// }
 
 				mutex.Lock()
 				oldLastIndex := Blockchain[len(Blockchain)-1]
 				mutex.Unlock()
 
 				// create newBlock for consideration to be forged
-				newBlock, err := generateBlock(oldLastIndex, bpm, address)
+				newBlock, err := generateBlock(oldLastIndex, 60, address)
 				if err != nil {
 					log.Println(err)
 					continue
@@ -208,8 +214,8 @@ func handleConn(conn net.Conn) {
 				if isBlockValid(newBlock, oldLastIndex) {
 					candidateBlocks <- newBlock
 				}
-				io.WriteString(conn, "\nEnter a new BPM:")
-			}
+			// 	io.WriteString(conn, "\nEnter a new BPM:")
+			// }
 		}
 	}()
 
