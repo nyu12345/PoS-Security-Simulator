@@ -6,7 +6,7 @@ import (
 
 func main() {
 	//manual or auto
-	runType := "manual"
+	runType := "auto"
 	numValidators := 100
 	numUsers := 20
 	numMal := 0

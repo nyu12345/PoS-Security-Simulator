@@ -190,16 +190,15 @@ func nextTimeSlot() {
 	}
 
 	// Process validation results
-	isValidBlock := true
+	validCount := 0
+	validationResults := make(map[string]bool)
 	for _, validator := range validationCommittee {
 		msg := <-validator.commChannel
 		switch msg := msg.(type) { // Use type assertion to determine the type of the received message
 		case ValidationStatusMessage:
-			if msg.isValid == false {
-				//Invalid block
-				isValidBlock = false
-				fmt.Printf("Block %d is invalid\n", newBlock.Index)
-				break
+			validationResults[validator.Address] = msg.isValid
+			if msg.isValid == true {
+				validCount++
 			}
 		case NewTransactionMessage:
 			validator.commChannel <- msg
@@ -209,8 +208,8 @@ func nextTimeSlot() {
 		}
 	}
 
-	//add block if isValid
-	if isValidBlock {
+	//add block if majority believe block is valid
+	if validCount >= len(validationCommittee)/2 {
 		Blockchain = append(Blockchain, newBlock)
 		fmt.Printf("Valid block added to blockchain\n")
 
@@ -236,6 +235,14 @@ func nextTimeSlot() {
 		}
 
 		printBlockchain()
+	} else {
+		//punish validators who validated the invalid block
+		slashPercentage := 0.2
+		for _, validator := range validationCommittee {
+			if validationResults[validator.Address] == true {
+				validator.Stake *= slashPercentage
+			}
+		}
 	}
 
 }
