@@ -2,7 +2,10 @@ module PoS-Security-Simulator
 
 go 1.20
 
-require github.com/joho/godotenv v1.5.1
+require (
+	github.com/davecgh/go-spew v1.1.1
+	github.com/joho/godotenv v1.5.1
+)
 
 require (
 	github.com/cilium/ebpf v0.10.0 // indirect

@@ -6,7 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
-	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
 	mathrand "math/rand"
@@ -56,18 +56,16 @@ func signTransaction(t *Transaction, privateKey *rsa.PrivateKey) error {
 	data := fmt.Sprintf("%d%p%p%f%f", t.ID, t.Sender, t.Receiver, t.Amount, t.Reward)
 
 	// Hash the data using SHA256
-	h := sha256.New()
-	h.Write([]byte(data))
-	hashed := h.Sum(nil)
+	hash := sha256.Sum256([]byte(data))
 
 	// Sign the hashed data using the private key
-	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, hashed)
+	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, hash[:])
 	if err != nil {
 		return err
 	}
 
 	// Encode the signature as a base64 string
-	t.Signature = base64.StdEncoding.EncodeToString(signature)
+	t.Signature = hex.EncodeToString(signature)
 
 	return nil
 }
@@ -217,13 +215,7 @@ func handleUserConnection(conn net.Conn, runType string) {
 		transactionID++
 		mutex.Unlock()
 
-		curTransaction := &Transaction{
-			ID:       curTransactionID,
-			Sender:   users[curUser.Name],
-			Receiver: users[receiverName],
-			Amount:   amount,
-			Reward:   reward,
-		}
+		curTransaction := generateTransaction(curTransactionID, users[curUser.Name], users[receiverName], amount, reward)
 
 		//Broadcast current transaction to all validators
 		mutex.Lock()
@@ -233,7 +225,7 @@ func handleUserConnection(conn net.Conn, runType string) {
 		io.WriteString(conn, transactionString)
 		for _, validator := range validatorsCopy {
 			msg := NewTransactionMessage{
-				transaction: *curTransaction,
+				transaction: curTransaction,
 			}
 			validator.commChannel <- msg
 		}

@@ -2,6 +2,10 @@ package pos
 
 import (
 	"bufio"
+	"crypto"
+	"crypto/rsa"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -80,6 +84,25 @@ func isBlockValid(newBlock Block, oldBlock Block) bool {
 }
 
 func isTransactionValid(transaction Transaction, validator *Validator) bool {
+	//Sender and receiver are both real users
+	if transaction.Sender == nil || transaction.Receiver == nil {
+		io.WriteString(validator.conn, "Transaction sender or receiver is not an active user\n")
+		return false
+	}
+
+	//Public key verifies transaction
+	signatureBytes, _ := hex.DecodeString(transaction.Signature)
+
+	// Compute the transaction hash
+	data := fmt.Sprintf("%d%p%p%f%f", transaction.ID, transaction.Sender, transaction.Receiver, transaction.Amount, transaction.Reward)
+	hash := sha256.Sum256([]byte(data))
+
+	err := rsa.VerifyPKCS1v15(transaction.Sender.PublicKey, crypto.SHA256, hash[:], signatureBytes)
+	if err != nil {
+		io.WriteString(validator.conn, "Transaction could not be verified with public key\n")
+		return false
+	}
+
 	//Transaction was already spent
 	if validator.confirmedTransactions[transaction.ID] == true {
 		io.WriteString(validator.conn, "Transaction was already spent\n")
