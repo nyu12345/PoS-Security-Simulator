@@ -1,13 +1,8 @@
 package pos
 
-import (
-	"sync"
-)
-
 type ValidateBlockMessage struct {
 	newBlock Block
 	oldBlock Block
-	wg       *sync.WaitGroup
 }
 
 type ValidationStatusMessage struct {

@@ -36,7 +36,7 @@ var validationCommittee = make([]*Validator, 0)
 // Malicious validators
 var malValidators = make([]*Validator, 0)
 
-var mutex = &sync.Mutex{}
+var validatorsSliceLock = &sync.Mutex{}
 
 func Run(runType string, numValidators int, numUsers int, numMal int) {
 	err := godotenv.Load()
@@ -111,7 +111,8 @@ func Run(runType string, numValidators int, numUsers int, numMal int) {
 
 }
 
-func printBlockchain() {
+func printInfo() {
+	//prints blockchain
 	printString := ""
 	for _, block := range Blockchain {
 		printString += "->["
@@ -122,8 +123,20 @@ func printBlockchain() {
 		printString += "]"
 	}
 	printString = printString[1:]
-	fmt.Println("BLOCKCHAIN")
-	fmt.Println(printString)
+	println("BLOCKCHAIN")
+	println(printString)
+
+	//prints User balances
+	println("User balances")
+	for user := range users {
+		fmt.Printf("%s: %f\n", users[user].Name, users[user].Balance)
+	}
+
+	//prints Validator balances
+	println("Validator balances")
+	for _, validator := range validators {
+		fmt.Printf("%s: %f\n", validator.Address[:3], validator.Stake)
+	}
 }
 
 func nextTimeSlot() {
@@ -132,13 +145,13 @@ func nextTimeSlot() {
 	fmt.Printf("\nTime slot %s\n\n", time.Now().Format("15:04:05"))
 
 	//Choose a new block proposer based on stake
-	mutex.Lock()
+	validatorsSliceLock.Lock()
 	if len(validators) == 0 {
-		mutex.Unlock()
+		validatorsSliceLock.Unlock()
 		return
 	}
 	validatorsCopy := validators
-	mutex.Unlock()
+	validatorsSliceLock.Unlock()
 
 	totalWeight := 0.0
 	for _, validator := range validatorsCopy {
@@ -178,47 +191,47 @@ func nextTimeSlot() {
 
 	//validation committee validates blocks
 	//broadcast block to all members of committee
-	var wg sync.WaitGroup
-	wg.Add(len(validationCommittee))
 	for _, validator := range validationCommittee {
 		msg := ValidateBlockMessage{
 			newBlock: newBlock,
 			oldBlock: oldBlock,
-			wg:       &wg,
 		}
-		validator.commChannel <- msg
+		validator.incomingChannel <- msg
 	}
 
 	// Process validation results
 	validCount := 0
+	invalidCount := 0
 	validationResults := make(map[string]bool)
 	for _, validator := range validationCommittee {
-		msg := <-validator.commChannel
+		msg := <-validator.outgoingChannel
 		switch msg := msg.(type) { // Use type assertion to determine the type of the received message
 		case ValidationStatusMessage:
 			validationResults[validator.Address] = msg.isValid
 			if msg.isValid == true {
 				validCount++
+			} else {
+				invalidCount++
 			}
-		case NewTransactionMessage:
-			validator.commChannel <- msg
 		default:
 			fmt.Printf("Received an unknown struct: %+v\n", msg)
 			fmt.Printf("%T\n", msg)
 		}
 	}
+	fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nCommittee size: %d\n", invalidCount, validCount, len(validationCommittee))
 
 	//add block if majority believe block is valid
-	if validCount >= len(validationCommittee)/2 {
+	isValid := validCount >= len(validationCommittee)/2
+	if isValid {
 		Blockchain = append(Blockchain, newBlock)
-		fmt.Printf("Valid block added to blockchain\n")
+		println("Valid block added to blockchain")
 
 		//broadcast the verified transactions to all blocks
 		msg := VerifiedTransactionMessage{
 			transactions: newBlock.Transactions,
 		}
 		for _, validator := range validators {
-			validator.commChannel <- msg
+			validator.incomingChannel <- msg
 		}
 
 		//Update transactional amounts and reward proposer
@@ -233,17 +246,24 @@ func nextTimeSlot() {
 			receiverString := fmt.Sprintf("New balance: %f\n", transaction.Receiver.Balance)
 			io.WriteString(transaction.Receiver.conn, receiverString)
 		}
-
-		printBlockchain()
 	} else {
-		//punish validators who validated the invalid block
-		slashPercentage := 0.2
-		for _, validator := range validationCommittee {
+		println("Committee votes block invalid")
+	}
+	//punish validators who voted against the majority
+	slashPercentage := 0.2
+	for _, validator := range validationCommittee {
+		if isValid {
+			if validationResults[validator.Address] == false {
+				validator.Stake *= slashPercentage
+			}
+		} else {
 			if validationResults[validator.Address] == true {
 				validator.Stake *= slashPercentage
 			}
 		}
 	}
+
+	printInfo()
 
 }
 

@@ -13,6 +13,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -24,6 +25,7 @@ type User struct {
 	Balance     float64
 	PublicKey   *rsa.PublicKey
 	privateKey  *rsa.PrivateKey
+	userLock    sync.Mutex
 }
 
 type Transaction struct {
@@ -38,6 +40,12 @@ type Transaction struct {
 var transactionID = 0
 
 var userID = 0
+
+var usersSliceLock = &sync.Mutex{}
+
+var userIDLock = &sync.Mutex{}
+
+var transactionIDLock = &sync.Mutex{}
 
 func generateTransaction(index int, sender *User, receiver *User, amount float64, reward float64) Transaction {
 	transaction := Transaction{
@@ -99,10 +107,10 @@ func handleUserConnection(conn net.Conn, runType string) {
 	scannedName := bufio.NewScanner(conn)
 	name := ""
 	if runType == "auto" {
-		mutex.Lock()
+		userIDLock.Lock()
 		name = fmt.Sprintf("user%d", userID)
 		userID++
-		mutex.Unlock()
+		userIDLock.Unlock()
 		scannedName = bufio.NewScanner(strings.NewReader(name))
 	}
 	for scannedName.Scan() {
@@ -135,6 +143,7 @@ func handleUserConnection(conn net.Conn, runType string) {
 		Balance:     float64(balance),
 		privateKey:  privateKey,
 		PublicKey:   publicKey,
+		userLock:    sync.Mutex{},
 	}
 
 	users[name] = curUser
@@ -148,7 +157,7 @@ func handleUserConnection(conn net.Conn, runType string) {
 		receiverName := ""
 
 		if runType == "auto" {
-			mutex.Lock()
+			usersSliceLock.Lock()
 			mathrand.Seed(time.Now().UnixNano())
 			randomIndex := 0
 			if len(users)-1 > 0 {
@@ -164,7 +173,7 @@ func handleUserConnection(conn net.Conn, runType string) {
 				counter++
 			}
 			scannedReceiver = bufio.NewScanner(strings.NewReader(randomUser))
-			mutex.Unlock()
+			usersSliceLock.Unlock()
 		}
 
 		for scannedReceiver.Scan() {
@@ -210,24 +219,24 @@ func handleUserConnection(conn net.Conn, runType string) {
 			break
 		}
 
-		mutex.Lock()
+		transactionIDLock.Lock()
 		curTransactionID := transactionID
 		transactionID++
-		mutex.Unlock()
+		transactionIDLock.Unlock()
 
 		curTransaction := generateTransaction(curTransactionID, users[curUser.Name], users[receiverName], amount, reward)
 
 		//Broadcast current transaction to all validators
-		mutex.Lock()
+		validatorsSliceLock.Lock()
 		validatorsCopy := validators
-		mutex.Unlock()
+		validatorsSliceLock.Unlock()
 		transactionString := fmt.Sprintf("Sent transaction %d\n", curTransaction.ID)
 		io.WriteString(conn, transactionString)
 		for _, validator := range validatorsCopy {
 			msg := NewTransactionMessage{
 				transaction: curTransaction,
 			}
-			validator.commChannel <- msg
+			validator.transactionChannel <- msg
 		}
 		time.Sleep(5 * time.Second)
 	}

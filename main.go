@@ -7,8 +7,8 @@ import (
 func main() {
 	//manual or auto
 	runType := "auto"
-	numValidators := 100
-	numUsers := 20
+	numValidators := 6
+	numUsers := 3
 	numMal := 0
 	pos.Run(runType, numValidators, numUsers, numMal)
 }

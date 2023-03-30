@@ -13,17 +13,21 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 type Validator struct {
 	conn                    net.Conn
-	commChannel             chan interface{}
+	incomingChannel         chan interface{}
+	outgoingChannel         chan interface{}
+	transactionChannel      chan NewTransactionMessage
 	Address                 string
 	Stake                   float64
 	unconfirmedTransactions map[int]Transaction
 	confirmedTransactions   map[int]bool
 	IsMalicious             bool
+	validatorLock           sync.Mutex
 }
 
 // generateBlock creates a new block using previous block's hash
@@ -109,13 +113,13 @@ func isTransactionValid(transaction Transaction, validator *Validator) bool {
 		return false
 	}
 	//User has insufficient funds
-	mutex.Lock()
+	transaction.Sender.userLock.Lock()
 	if (transaction.Amount + transaction.Reward) > transaction.Sender.Balance {
 		io.WriteString(validator.conn, "Sender has insufficient funds\n")
-		mutex.Unlock()
+		transaction.Sender.userLock.Unlock()
 		return false
 	}
-	mutex.Unlock()
+	transaction.Sender.userLock.Unlock()
 	io.WriteString(validator.conn, "Transaction is valid\n")
 	return true
 }
@@ -170,12 +174,15 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 	confirmedTransactions := make(map[int]bool)
 	curValidator := &Validator{
 		conn:                    conn,
-		commChannel:             make(chan interface{}),
+		incomingChannel:         make(chan interface{}),
+		outgoingChannel:         make(chan interface{}),
+		transactionChannel:      make(chan NewTransactionMessage),
 		Address:                 address,
 		Stake:                   balance,
 		unconfirmedTransactions: unconfirmedTransactions,
 		confirmedTransactions:   confirmedTransactions,
 		IsMalicious:             isMal,
+		validatorLock:           sync.Mutex{},
 	}
 	validators = append(validators, curValidator)
 
@@ -185,28 +192,31 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 
 	fmt.Printf("new validator count: %d\n", len(validators))
 
-	//listen for messages in communication channel
-	for {
-		msg := <-curValidator.commChannel
-		switch msg := msg.(type) {
-		//Receiving block to validate
-		case ValidateBlockMessage:
-			io.WriteString(conn, "Received a Block to validate\n")
-			go func() {
-				defer msg.wg.Done()
-				isValid := isBlockValid(msg.newBlock, msg.oldBlock)
-				validationStatusMessage := ValidationStatusMessage{
-					isValid: isValid,
-				}
-				curValidator.commChannel <- validationStatusMessage
-			}()
-		//Receiving unverified transactions
-		case NewTransactionMessage:
+	//listen for transactions in transaction channel
+	go func() {
+		for {
+			msg := <-curValidator.transactionChannel
+			//Receiving unverified transactions
 			io.WriteString(conn, "Received unverified transaction\n")
 			isValid := isTransactionValid(msg.transaction, curValidator)
 			if isValid {
 				curValidator.unconfirmedTransactions[msg.transaction.ID] = msg.transaction
 			}
+		}
+	}()
+
+	//listen for messages in communication channel
+	for {
+		msg := <-curValidator.incomingChannel
+		switch msg := msg.(type) {
+		//Receiving block to validate
+		case ValidateBlockMessage:
+			io.WriteString(conn, "Received a Block to validate\n")
+			isValid := isBlockValid(msg.newBlock, msg.oldBlock)
+			validationStatusMessage := ValidationStatusMessage{
+				isValid: isValid,
+			}
+			curValidator.outgoingChannel <- validationStatusMessage
 		//Receiving verified transactions
 		case VerifiedTransactionMessage:
 			io.WriteString(conn, "Received verified transaction\n")
