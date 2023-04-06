@@ -16,7 +16,7 @@ import (
 )
 
 // Blockchain is a series of validated Blocks
-var Blockchain []Block
+var Blockchain [][]Block
 
 //Temporary blocks if we want to look into finality attacks
 // var tempChain []Block
@@ -46,9 +46,16 @@ func Run(runType string, numValidators int, numUsers int, numMal int) {
 
 	// create genesis block
 	t := time.Now()
-	genesisBlock := Block{}
-	genesisBlock = Block{Index: 0, Timestamp: t.String(), Transactions: []Transaction{}, Hash: calculateBlockHash(genesisBlock), PrevHash: "", Validator: ""}
-	Blockchain = append(Blockchain, genesisBlock)
+	genesisBlock0 := Block{}
+	genesisBlock0 = Block{Index: 0, Timestamp: t.String(), Transactions: []Transaction{}, Hash: calculateBlockHash(genesisBlock0), PrevHash: "", Validator: ""}
+	genesisBlockchain0 := []Block{genesisBlock0}
+	Blockchain = append(Blockchain, genesisBlockchain0)
+
+	// create fork in blockchain for balance attack
+	genesisBlock1 := Block{}
+	genesisBlock1 = Block{Index: 1, Timestamp: t.String(), Transactions: []Transaction{}, Hash: calculateBlockHash(genesisBlock1), PrevHash: "", Validator: ""}
+	genesisBlockchain1 := []Block{genesisBlock1}
+	Blockchain = append(Blockchain, genesisBlockchain1)
 
 	tcpPort := os.Getenv("PORT")
 
@@ -113,18 +120,32 @@ func Run(runType string, numValidators int, numUsers int, numMal int) {
 
 func printInfo() {
 	//prints blockchain
-	printString := ""
-	for _, block := range Blockchain {
-		printString += "->["
+	printString1 := ""
+	for _, block := range Blockchain[0] {
+		printString1 += "->["
 		for _, transaction := range block.Transactions {
-			printString += fmt.Sprintf("%d,", transaction.ID)
+			printString1 += fmt.Sprintf("%d,", transaction.ID)
 		}
-		printString = printString[:len(printString)-1]
-		printString += "]"
+		printString1 = printString1[:len(printString1)-1]
+		printString1 += "]"
 	}
-	printString = printString[1:]
+
+	//build string for fork of blockchain
+	printString2 := ""
+	for _, block := range Blockchain[1] {
+		printString2 += "->["
+		for _, transaction := range block.Transactions {
+			printString2 += fmt.Sprintf("%d,", transaction.ID)
+		}
+		printString2 = printString2[:len(printString2)-1]
+		printString2 += "]"
+	}
+
+	printString1 = printString1[1:]
+	printString2 = printString2[1:]
 	println("BLOCKCHAIN")
-	println(printString)
+	println(printString1)
+	println(printString2)
 
 	//prints User balances
 	println("User balances")
@@ -173,8 +194,18 @@ func nextTimeSlot() {
 	fmt.Printf("Proposer %s chosen as new block proposer\n", proposer.Address[:3])
 
 	//block proposer chooses a new block
-	oldBlock := Blockchain[len(Blockchain)-1]
-	newBlock, err := generateBlock(oldBlock, proposer)
+	//different old blocks depending on view of blockchain
+	oldBlock0 := Blockchain[0][len(Blockchain[0])-1]
+	oldBlock1 := Blockchain[1][len(Blockchain[1])-1]
+	newBlock, err := generateBlock(oldBlock0, proposer)
+	proposerChain := 0
+
+	// if proposer is malicious, generate with other fork's previous block
+	if proposer.IsMalicious {
+		newBlock, err = generateBlock(oldBlock1, proposer)
+		proposerChain = 1
+	} 
+	
 	if err != nil {
 		fmt.Println(err.Error())
 		return
@@ -192,9 +223,20 @@ func nextTimeSlot() {
 	//validation committee validates blocks
 	//broadcast block to all members of committee
 	for _, validator := range validationCommittee {
+		oldBlock := Block{}
+		if validator.IsMalicious{
+			oldBlock = oldBlock1
+		}else{
+			oldBlock = oldBlock0
+		}
+
+		// send which fork is longer in message so malicious validator can manipulate and try to balance
 		msg := ValidateBlockMessage{
 			newBlock: newBlock,
 			oldBlock: oldBlock,
+			fork0Length: len(Blockchain[0]),
+			fork1Length: len(Blockchain[1]),
+			proposerView: proposerChain,
 		}
 		validator.incomingChannel <- msg
 	}
@@ -223,7 +265,12 @@ func nextTimeSlot() {
 	//add block if majority believe block is valid
 	isValid := validCount >= len(validationCommittee)/2
 	if isValid {
-		Blockchain = append(Blockchain, newBlock)
+		// append block depending on proposers view of fork
+		if proposer.IsMalicious{
+			Blockchain[1] = append(Blockchain[1], newBlock)
+		} else{
+			Blockchain[0] = append(Blockchain[0], newBlock)
+		}
 		println("Valid block added to blockchain")
 
 		//broadcast the verified transactions to all blocks

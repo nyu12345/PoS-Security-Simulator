@@ -68,7 +68,23 @@ func generateBlock(oldBlock Block, proposer *Validator) (Block, error) {
 	return newBlock, nil
 }
 
-func isBlockValid(newBlock Block, oldBlock Block) bool {
+func isBlockValid(newBlock Block, oldBlock Block, fork0Length int, fork1Length int, proposerView int, validator *Validator) bool {
+
+	// logic to attempt to balance forks of chain if validator is malicious
+	if validator.IsMalicious{
+		fmt.Println("malicious validator voting to balance forks")
+		println(proposerView)
+		println(fork0Length)
+		println(fork1Length)
+
+		if (proposerView == 0 && fork0Length > fork1Length) || (proposerView == 1 && fork1Length > fork0Length) {
+			return false
+		} else {
+			return true
+		}
+
+	}
+
 	if oldBlock.Index+1 != newBlock.Index {
 		fmt.Println("old block is not the previous block")
 		return false
@@ -212,7 +228,7 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 		//Receiving block to validate
 		case ValidateBlockMessage:
 			io.WriteString(conn, "Received a Block to validate\n")
-			isValid := isBlockValid(msg.newBlock, msg.oldBlock)
+			isValid := isBlockValid(msg.newBlock, msg.oldBlock, msg.fork0Length, msg.fork1Length, msg.proposerView, curValidator)
 			validationStatusMessage := ValidationStatusMessage{
 				isValid: isValid,
 			}

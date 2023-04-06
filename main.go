@@ -9,6 +9,6 @@ func main() {
 	runType := "auto"
 	numValidators := 6
 	numUsers := 3
-	numMal := 0
+	numMal := 4
 	pos.Run(runType, numValidators, numUsers, numMal)
 }
