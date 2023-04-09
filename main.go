@@ -10,5 +10,6 @@ func main() {
 	numValidators := 6
 	numUsers := 3
 	numMal := 0
-	pos.Run(runType, numValidators, numUsers, numMal)
+	attack := "none"
+	pos.Run(runType, numValidators, numUsers, numMal, attack)
 }

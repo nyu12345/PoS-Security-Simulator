@@ -38,7 +38,7 @@ var malValidators = make([]*Validator, 0)
 
 var validatorsSliceLock = &sync.Mutex{}
 
-func Run(runType string, numValidators int, numUsers int, numMal int) {
+func Run(runType string, numValidators int, numUsers int, numMal int, attack string) {
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal(err)
