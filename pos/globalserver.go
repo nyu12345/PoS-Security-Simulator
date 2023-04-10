@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"gonum.org/v1/gonum/stat/sampleuv"
 )
 
 // Blockchain is a series of validated Blocks
@@ -38,11 +39,14 @@ var malValidators = make([]*Validator, 0)
 
 var validatorsSliceLock = &sync.Mutex{}
 
-func Run(runType string, numValidators int, numUsers int, numMal int, attack string) {
+var committeeSize = 0
+
+func Run(runType string, numValidators int, numUsers int, numMal int, comSize int, attack string) {
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal(err)
 	}
+	committeeSize = comSize
 
 	// create genesis block
 	t := time.Now()
@@ -111,6 +115,52 @@ func Run(runType string, numValidators int, numUsers int, numMal int, attack str
 
 }
 
+func chooseValidationCommittee(validators []*Validator, committeeSize int) []*Validator {
+	//make a slice of stakes for weighted dsitribution
+	validatorsSliceLock.Lock()
+	stakeWeights := make([]float64, len(validators))
+	for i, validator := range validators {
+		stakeWeights[i] = validator.Stake
+	}
+	validatorsSliceLock.Unlock()
+
+	validationCommittee := make([]*Validator, 0)
+	weightedDist := sampleuv.NewWeighted(stakeWeights, nil)
+	for i := 0; i < committeeSize; i++ {
+		index, isOk := weightedDist.Take()
+		if isOk {
+			validationCommittee = append(validationCommittee, validators[index])
+		} else {
+			break
+		}
+	}
+	return validationCommittee
+}
+
+func chooseBlockProposer() *Validator {
+	if len(validationCommittee) == 0 {
+		return nil
+	}
+
+	totalWeight := 0.0
+	for _, validator := range validationCommittee {
+		totalWeight += validator.Stake
+	}
+
+	randomNumber := 0.0
+	rand.Seed(time.Now().UnixNano())
+	randomNumber = rand.Float64() * totalWeight
+
+	weightSum := 0.0
+	for _, validator := range validationCommittee {
+		weightSum += validator.Stake
+		if weightSum >= randomNumber {
+			return validator
+		}
+	}
+	return nil
+}
+
 func printInfo() {
 	//prints blockchain
 	printString := ""
@@ -135,7 +185,7 @@ func printInfo() {
 	//prints Validator balances
 	println("Validator balances")
 	for _, validator := range validators {
-		fmt.Printf("%s: %f\n", validator.Address[:3], validator.Stake)
+		fmt.Printf("%s: %f, %d\n", validator.Address[:3], validator.Stake, validator.committeeCount)
 	}
 }
 
@@ -144,32 +194,19 @@ func nextTimeSlot() {
 	time.Sleep(5 * time.Second)
 	fmt.Printf("\nTime slot %s\n\n", time.Now().Format("15:04:05"))
 
+	//randomly choose new committee of a third of all validators who will validate the new block
+	validationCommittee = chooseValidationCommittee(validators, committeeSize)
+	fmt.Println("New validation committee chosen")
+	for _, commit := range validationCommittee {
+		commit.committeeCount += 1
+		fmt.Println(commit.Address[:3])
+	}
 	//Choose a new block proposer based on stake
-	validatorsSliceLock.Lock()
-	if len(validators) == 0 {
-		validatorsSliceLock.Unlock()
+	proposer = chooseBlockProposer()
+	if proposer == nil {
 		return
 	}
-	validatorsCopy := validators
-	validatorsSliceLock.Unlock()
-
-	totalWeight := 0.0
-	for _, validator := range validatorsCopy {
-		totalWeight += validator.Stake
-	}
-
-	randomNumber := 0.0
-	rand.Seed(time.Now().UnixNano())
-	randomNumber = rand.Float64() * totalWeight
-
-	weightSum := 0.0
-	for _, validator := range validatorsCopy {
-		weightSum += validator.Stake
-		if weightSum >= randomNumber {
-			proposer = validator
-			break
-		}
-	}
+	proposer.proposerCount += 1
 	fmt.Printf("Proposer %s chosen as new block proposer\n", proposer.Address[:3])
 
 	//block proposer chooses a new block
@@ -181,13 +218,6 @@ func nextTimeSlot() {
 	}
 
 	fmt.Printf("Block %d chosen as new block\n", newBlock.Index)
-
-	//randomly choose new committee of a third of all validators who will validate the new block
-	rand.Shuffle(len(validatorsCopy), func(i, j int) {
-		validatorsCopy[i], validatorsCopy[j] = validatorsCopy[j], validatorsCopy[i]
-	})
-	validationCommittee = validatorsCopy[:len(validatorsCopy)/3]
-	fmt.Println("New validation committee chosen")
 
 	//validation committee validates blocks
 	//broadcast block to all members of committee

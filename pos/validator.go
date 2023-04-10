@@ -28,6 +28,8 @@ type Validator struct {
 	confirmedTransactions   map[int]bool
 	IsMalicious             bool
 	validatorLock           sync.Mutex
+	committeeCount          int
+	proposerCount           int
 }
 
 // generateBlock creates a new block using previous block's hash

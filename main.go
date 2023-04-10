@@ -10,6 +10,7 @@ func main() {
 	numValidators := 6
 	numUsers := 3
 	numMal := 0
+	committeeSize := numValidators / 3
 	attack := "none"
-	pos.Run(runType, numValidators, numUsers, numMal, attack)
+	pos.Run(runType, numValidators, numUsers, numMal, committeeSize, attack)
 }
