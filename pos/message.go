@@ -1,8 +1,11 @@
 package pos
 
+type GenesisBlockMessage struct {
+	genesisBlock Block
+}
+
 type ValidateBlockMessage struct {
 	newBlock Block
-	oldBlock Block
 }
 
 type ValidationStatusMessage struct {
@@ -13,6 +16,13 @@ type NewTransactionMessage struct {
 	transaction Transaction
 }
 
-type VerifiedTransactionMessage struct {
+type VerifiedBlockMessage struct {
 	transactions []Transaction
+	newBlock Block
 }
+
+type TransactionConsensusMessage struct {
+	unconfirmedTransactions map[int]Transaction
+	confirmedTransactions map[int]bool
+}
+

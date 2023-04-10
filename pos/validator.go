@@ -30,10 +30,11 @@ type Validator struct {
 	validatorLock           sync.Mutex
 	committeeCount          int
 	proposerCount           int
+	Blockchain              []Block
 }
 
 // generateBlock creates a new block using previous block's hash
-func generateBlock(oldBlock Block, proposer *Validator) (Block, error) {
+func generateBlock(proposer *Validator) (Block, error) {
 
 	var newBlock Block
 
@@ -59,7 +60,7 @@ func generateBlock(oldBlock Block, proposer *Validator) (Block, error) {
 	//set block information
 
 	t := time.Now()
-
+	oldBlock := proposer.Blockchain[len(proposer.Blockchain)-1]
 	newBlock.Index = oldBlock.Index + 1
 	newBlock.Timestamp = t.String()
 	newBlock.PrevHash = oldBlock.Hash
@@ -70,7 +71,8 @@ func generateBlock(oldBlock Block, proposer *Validator) (Block, error) {
 	return newBlock, nil
 }
 
-func isBlockValid(newBlock Block, oldBlock Block) bool {
+func isBlockValid(newBlock Block) bool {
+	oldBlock := proposer.Blockchain[len(proposer.Blockchain)-1]
 	if oldBlock.Index+1 != newBlock.Index {
 		fmt.Println("old block is not the previous block")
 		return false
@@ -185,6 +187,9 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 		confirmedTransactions:   confirmedTransactions,
 		IsMalicious:             isMal,
 		validatorLock:           sync.Mutex{},
+		committeeCount:          0,
+		proposerCount:           0,
+		Blockchain:              CertifiedBlockchain,
 	}
 	validators = append(validators, curValidator)
 
@@ -201,9 +206,11 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 			//Receiving unverified transactions
 			io.WriteString(conn, "Received unverified transaction\n")
 			isValid := isTransactionValid(msg.transaction, curValidator)
+			curValidator.validatorLock.Lock()
 			if isValid {
 				curValidator.unconfirmedTransactions[msg.transaction.ID] = msg.transaction
 			}
+			curValidator.validatorLock.Unlock()
 		}
 	}()
 
@@ -214,13 +221,13 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 		//Receiving block to validate
 		case ValidateBlockMessage:
 			io.WriteString(conn, "Received a Block to validate\n")
-			isValid := isBlockValid(msg.newBlock, msg.oldBlock)
+			isValid := isBlockValid(msg.newBlock)
 			validationStatusMessage := ValidationStatusMessage{
 				isValid: isValid,
 			}
 			curValidator.outgoingChannel <- validationStatusMessage
 		//Receiving verified transactions
-		case VerifiedTransactionMessage:
+		case VerifiedBlockMessage:
 			io.WriteString(conn, "Received verified transaction\n")
 			//put verified transactions into confirmed slice for validator
 			for _, transaction := range msg.transactions {
@@ -231,6 +238,9 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 			for _, transaction := range msg.transactions {
 				delete(curValidator.unconfirmedTransactions, transaction.ID)
 			}
+
+			//add new block
+			curValidator.Blockchain = append(curValidator.Blockchain, msg.newBlock);
 		default:
 			io.WriteString(conn, "Received an unknown struct: %+v\n")
 		}

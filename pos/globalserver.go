@@ -17,7 +17,7 @@ import (
 )
 
 // Blockchain is a series of validated Blocks
-var Blockchain []Block
+var CertifiedBlockchain []Block
 
 //Temporary blocks if we want to look into finality attacks
 // var tempChain []Block
@@ -41,6 +41,8 @@ var validatorsSliceLock = &sync.Mutex{}
 
 var committeeSize = 0
 
+var runConsensusCounter = 0
+
 func Run(runType string, numValidators int, numUsers int, numMal int, comSize int, attack string) {
 	err := godotenv.Load()
 	if err != nil {
@@ -52,7 +54,7 @@ func Run(runType string, numValidators int, numUsers int, numMal int, comSize in
 	t := time.Now()
 	genesisBlock := Block{}
 	genesisBlock = Block{Index: 0, Timestamp: t.String(), Transactions: []Transaction{}, Hash: calculateBlockHash(genesisBlock), PrevHash: "", Validator: ""}
-	Blockchain = append(Blockchain, genesisBlock)
+	CertifiedBlockchain = append(CertifiedBlockchain, genesisBlock)
 
 	tcpPort := os.Getenv("PORT")
 
@@ -164,7 +166,7 @@ func chooseBlockProposer() *Validator {
 func printInfo() {
 	//prints blockchain
 	printString := ""
-	for _, block := range Blockchain {
+	for _, block := range CertifiedBlockchain {
 		printString += "->["
 		for _, transaction := range block.Transactions {
 			printString += fmt.Sprintf("%d,", transaction.ID)
@@ -193,6 +195,12 @@ func nextTimeSlot() {
 	//wait 5 seconds every slot
 	time.Sleep(5 * time.Second)
 	fmt.Printf("\nTime slot %s\n\n", time.Now().Format("15:04:05"))
+	runConsensusCounter += 1
+
+	if (runConsensusCounter >= 5){
+		longestChainConsensus();
+		runConsensusCounter = 0
+	}
 
 	//randomly choose new committee of a third of all validators who will validate the new block
 	validationCommittee = chooseValidationCommittee(validators, committeeSize)
@@ -210,8 +218,9 @@ func nextTimeSlot() {
 	fmt.Printf("Proposer %s chosen as new block proposer\n", proposer.Address[:3])
 
 	//block proposer chooses a new block
-	oldBlock := Blockchain[len(Blockchain)-1]
-	newBlock, err := generateBlock(oldBlock, proposer)
+
+	// oldBlock := Blockchain[len(Blockchain)-1]
+	newBlock, err := generateBlock(proposer)
 	if err != nil {
 		fmt.Println(err.Error())
 		return
@@ -224,7 +233,6 @@ func nextTimeSlot() {
 	for _, validator := range validationCommittee {
 		msg := ValidateBlockMessage{
 			newBlock: newBlock,
-			oldBlock: oldBlock,
 		}
 		validator.incomingChannel <- msg
 	}
@@ -253,12 +261,13 @@ func nextTimeSlot() {
 	//add block if majority believe block is valid
 	isValid := validCount >= len(validationCommittee)/2
 	if isValid {
-		Blockchain = append(Blockchain, newBlock)
+		// proposer.Blockchain = append(proposer.Blockchain, newBlock)
 		println("Valid block added to blockchain")
 
 		//broadcast the verified transactions to all blocks
-		msg := VerifiedTransactionMessage{
+		msg := VerifiedBlockMessage{
 			transactions: newBlock.Transactions,
+			newBlock: newBlock,
 		}
 		for _, validator := range validators {
 			validator.incomingChannel <- msg
@@ -315,5 +324,26 @@ func handleConnection(conn net.Conn, runType string, connectionType string, malS
 			fmt.Printf("%s is not a valid response\n Please enter 'u' or 'v' ", scannedType.Text())
 		}
 		break
+	}
+}
+
+func longestChainConsensus(){
+	longestLength := -1
+	var longestValidator *Validator = nil
+	for _, validator := range validators {
+		if(len(validator.Blockchain) > longestLength){
+			longestValidator = validator
+			longestLength = len(validator.Blockchain)
+		}
+	}
+
+	CertifiedBlockchain = longestValidator.Blockchain
+
+	for _, validator := range validators {
+		validator.validatorLock.Lock()
+		validator.Blockchain = longestValidator.Blockchain
+		validator.unconfirmedTransactions = longestValidator.unconfirmedTransactions
+		validator.confirmedTransactions = longestValidator.confirmedTransactions
+		validator.validatorLock.Unlock()
 	}
 }
