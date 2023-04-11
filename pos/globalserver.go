@@ -207,7 +207,7 @@ func nextTimeSlot() {
 	fmt.Println("New validation committee chosen")
 	for _, commit := range validationCommittee {
 		commit.committeeCount += 1
-		fmt.Println(commit.Address[:3])
+		// fmt.Println(commit.Address[:3])
 	}
 	//Choose a new block proposer based on stake
 	proposer = chooseBlockProposer()
