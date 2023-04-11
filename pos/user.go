@@ -238,7 +238,7 @@ func handleUserConnection(conn net.Conn, runType string) {
 			}
 			validator.transactionChannel <- msg
 		}
-		time.Sleep(5 * time.Second)
+		time.Sleep(1 * time.Second)
 	}
 
 }

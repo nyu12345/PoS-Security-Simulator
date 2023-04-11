@@ -21,11 +21,11 @@ type VerifiedBlockMessage struct {
 	newBlock     Block
 }
 
-type ConsensusMessage struct {
-	blockchain              []Block
-	unconfirmedTransactions map[int]Transaction
-	confirmedTransactions   map[int]bool
-}
+// type ConsensusMessage struct {
+// 	blockchain              []Block
+// 	unconfirmedTransactions map[int]Transaction
+// 	confirmedTransactions   map[int]bool
+// }
 
 type DelegateVoteRequestMessage struct {
 	delegateSize int

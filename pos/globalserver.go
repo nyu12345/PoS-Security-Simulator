@@ -52,6 +52,8 @@ var runConsensusCounter = 0
 
 var delegateCounter = 0
 
+var roundCount = 0
+
 func Run(runType string, numValidators int, numUsers int, numMal int, comSize int, delSize int, blockchainType string, attack string) {
 	err := godotenv.Load()
 	if err != nil {
@@ -83,12 +85,20 @@ func Run(runType string, numValidators int, numUsers int, numMal int, comSize in
 		go func() {
 			for {
 				nextTimeSlot()
+				roundCount++
+				if roundCount%10 == 0 {
+					printEvaluation()
+				}
 			}
 		}()
 	} else if blockchainType == "reputation" {
 		go func() {
 			for {
 				nextReputationTimeSlot()
+				roundCount++
+				if roundCount%10 == 0 {
+					printEvaluation()
+				}
 			}
 		}()
 	} else {
@@ -261,12 +271,9 @@ func longestChainConsensus() {
 		}
 		longestValidator.transactionPoolLock.Unlock()
 
-		msg := ConsensusMessage{
-			blockchain:              CertifiedBlockchain,
-			unconfirmedTransactions: unconfirmedTransactionsBuffer,
-			confirmedTransactions:   confirmedTransactionsBuffer,
-		}
-		validator.incomingChannel <- msg
+		validator.Blockchain = blockChainBuffer
+		validator.unconfirmedTransactions = unconfirmedTransactionsBuffer
+		validator.confirmedTransactions = confirmedTransactionsBuffer
 	}
 }
 
@@ -310,9 +317,14 @@ func printInfo() {
 	// }
 }
 
+func printEvaluation() {
+	//print malicious nodes
+	println("POOP")
+}
+
 func nextTimeSlot() {
 	//wait 5 seconds every slot
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 	fmt.Printf("\nTime slot %s\n\n", time.Now().Format("15:04:05"))
 	runConsensusCounter += 1
 
@@ -422,14 +434,13 @@ func nextTimeSlot() {
 			}
 		}
 	}
-
 	printInfo()
 
 }
 
 func nextReputationTimeSlot() {
 	//wait 5 seconds every slot
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 	fmt.Printf("\nTime slot %s\n\n", time.Now().Format("15:04:05"))
 	runConsensusCounter += 1
 
@@ -496,7 +507,7 @@ func nextReputationTimeSlot() {
 	if isValid {
 		println("Valid block added to blockchain")
 		proposer.blockSuccessCount += 1
-		proposer.reputation = math.Min(10, proposer.reputation+1)
+		proposer.reputation = math.Min(100, proposer.reputation+1)
 		//broadcast the verified transactions to all blocks
 		msg := VerifiedBlockMessage{
 			transactions: newBlock.Transactions,
@@ -532,7 +543,7 @@ func nextReputationTimeSlot() {
 				validator.Stake *= slashPercentage
 				validator.reputation *= 0.2
 			} else {
-				validator.reputation = math.Min(10, 1+validator.reputation)
+				validator.reputation = math.Min(100, 1+validator.reputation)
 			}
 		} else {
 			//Block invalid, but voted valid
@@ -540,7 +551,7 @@ func nextReputationTimeSlot() {
 				validator.Stake *= slashPercentage
 				validator.reputation *= 0.2
 			} else {
-				validator.reputation = math.Min(10, 1+validator.reputation)
+				validator.reputation = math.Min(100, 1+validator.reputation)
 			}
 		}
 	}

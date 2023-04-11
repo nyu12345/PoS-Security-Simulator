@@ -277,13 +277,13 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 
 			//add new block
 			curValidator.Blockchain = append(curValidator.Blockchain, msg.newBlock)
-		case ConsensusMessage:
-			io.WriteString(conn, "Received new consensus state\n")
+		// case ConsensusMessage:
+		// 	io.WriteString(conn, "Received new consensus state\n")
 
-			//Update blockchain
-			curValidator.Blockchain = msg.blockchain
-			curValidator.unconfirmedTransactions = msg.unconfirmedTransactions
-			curValidator.confirmedTransactions = msg.confirmedTransactions
+		// 	//Update blockchain
+		// 	curValidator.Blockchain = msg.blockchain
+		// 	curValidator.unconfirmedTransactions = msg.unconfirmedTransactions
+		// 	curValidator.confirmedTransactions = msg.confirmedTransactions
 
 		default:
 			io.WriteString(conn, "Received an unknown struct: %+v\n")
