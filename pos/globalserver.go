@@ -254,9 +254,15 @@ func nextTimeSlot() {
 		return
 	}
 
-	var newBlockTwo Block
+	evilProposer := false
+
 	if proposer.IsMalicious {
-		println("GENERATING MALICIOUS DOUBLE SPENDING")
+		evilProposer = true
+	}
+
+	var newBlockTwo Block
+	if currAttack == "network_partition" && evilProposer {
+		println("EVIL PROPOSER DOING WORK")
 		newBlockTwo, err = generateBlock(proposer)
 		if err != nil {
 			fmt.Println(err.Error())
@@ -269,7 +275,7 @@ func nextTimeSlot() {
 	//validation committee validates blocks
 	//broadcast block to all members of committee
 	for i, validator := range validationCommittee {
-		if currAttack == "network_partition" {
+		if currAttack == "network_partition" && evilProposer {
 			msg := ValidateShortAttackBlockMessage{
 				newBlock:    newBlock,
 				newBlockTwo: newBlockTwo,
@@ -320,20 +326,28 @@ func nextTimeSlot() {
 			fmt.Printf("%T\n", msg)
 		}
 	}
-	fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nCommittee size: %d\n", invalidCount, validCount, len(validationCommittee))
+
+	if currAttack == "network_partition" {
+		fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nInvalid Two Count: %d\nValid Two Count: %d\nCommittee size: %d\n", invalidCount, validCount, invalidTwoCount, validTwoCount, len(validationCommittee))
+	} else {
+		fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nCommittee size: %d\n", invalidCount, validCount, len(validationCommittee))
+	}
 
 	//add block if majority believe block is valid
-	if currAttack == "network_partition" {
+	if currAttack == "network_partition" && evilProposer {
 		isValid := validCount >= len(validationCommittee)/4
 		isValidTwo := validTwoCount >= len(validationCommittee)/4
+
 		if isValid {
 			//broadcast the verified transactions to all blocks
-			msg := VerifiedBlockMessage{
-				transactions: newBlock.Transactions,
-				newBlock:     newBlock,
-			}
-			for _, validator := range validators {
-				validator.incomingChannel <- msg
+			for i, validator := range validators {
+				if i%2 == 0 {
+					msg := VerifiedShortAttackBlockMessage{
+						transactions: newBlock.Transactions,
+						newBlock:     newBlock,
+					}
+					validator.incomingChannel <- msg
+				}
 			}
 
 			//Update transactional amounts and reward proposer
@@ -355,16 +369,18 @@ func nextTimeSlot() {
 		}
 		if isValidTwo {
 			//broadcast the verified transactions to all blocks
-			msg := VerifiedBlockMessage{
-				transactions: newBlockTwo.Transactions,
-				newBlock:     newBlockTwo,
-			}
-			for _, validator := range validators {
-				validator.incomingChannel <- msg
+			for i, validator := range validators {
+				if i%2 == 1 {
+					msg := VerifiedShortAttackBlockTwoMessage{
+						transactions: newBlockTwo.Transactions,
+						newBlockTwo:  newBlockTwo,
+					}
+					validator.incomingChannel <- msg
+				}
 			}
 
 			//Update transactional amounts and reward proposer
-			for _, transaction := range newBlock.Transactions {
+			for _, transaction := range newBlockTwo.Transactions {
 				transaction.Sender.Balance -= (transaction.Amount + transaction.Reward)
 				transaction.Receiver.Balance += transaction.Amount
 				proposer.Stake += transaction.Reward

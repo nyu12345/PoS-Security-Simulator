@@ -9,8 +9,8 @@ func main() {
 	runType := "auto"
 	numValidators := 6
 	numUsers := 3
-	numMal := 1
-	committeeSize := 3
+	numMal := 2
+	committeeSize := 4
 	//pos, delegated, or reputation
 	blockchainType := "pos"
 	//To do short range attack, type "network_partition", else ""

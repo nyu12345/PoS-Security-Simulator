@@ -32,6 +32,16 @@ type VerifiedBlockMessage struct {
 	newBlock     Block
 }
 
+type VerifiedShortAttackBlockMessage struct {
+	transactions []Transaction
+	newBlock     Block
+}
+
+type VerifiedShortAttackBlockTwoMessage struct {
+	transactions []Transaction
+	newBlockTwo     Block
+}
+
 type ConsensusMessage struct {
 	blockchain              []Block
 	unconfirmedTransactions map[int]Transaction
