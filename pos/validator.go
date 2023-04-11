@@ -74,8 +74,8 @@ func generateBlock(proposer *Validator) (Block, error) {
 	return newBlock, nil
 }
 
-func isBlockValid(validator *Validator, newBlock Block) bool {
-	oldBlock := validator.Blockchain[len(proposer.Blockchain)-1]
+func isBlockValid(newBlock Block) bool {
+	oldBlock := proposer.Blockchain[len(proposer.Blockchain)-1]
 	if oldBlock.Index+1 != newBlock.Index {
 		fmt.Println("old block is not the previous block")
 		return false
@@ -197,6 +197,9 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 	copy(curValidator.Blockchain, CertifiedBlockchain)
 	validators = append(validators, curValidator)
 
+	ForkedBlockchain[forkedCounter%2][forkedCounter/2] = curValidator
+	forkedCounter += 1
+
 	if isMal {
 		malValidators = append(malValidators, curValidator)
 	}
@@ -225,7 +228,7 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 		//Receiving block to validate
 		case ValidateBlockMessage:
 			io.WriteString(conn, "Received a Block to validate\n")
-			isValid := isBlockValid(curValidator, msg.newBlock)
+			isValid := isBlockValid(msg.newBlock)
 			validationStatusMessage := ValidationStatusMessage{
 				isValid: isValid,
 			}
@@ -233,13 +236,8 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 		//Receiving blocks to validate (short attack ed.)
 		case ValidateShortAttackBlockMessage:
 			io.WriteString(conn, "Received both Blocks to validate\n")
-			var isValid bool
-			var isValidTwo bool
-			if msg.index%2 == 0 {
-				isValid = isBlockValid(curValidator, msg.newBlock)
-			} else {
-				isValidTwo = isBlockValid(curValidator, msg.newBlockTwo)
-			}
+			isValid := isBlockValid(msg.newBlock)
+			isValidTwo := isBlockValid(msg.newBlockTwo)
 			validationShortAttackStatusMessage := ValidationShortAttackStatusMessage{
 				isValid:    isValid,
 				isValidTwo: isValidTwo,

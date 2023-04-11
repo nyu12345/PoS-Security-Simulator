@@ -8,8 +8,8 @@ require (
 )
 
 require (
-	golang.org/x/exp v0.0.0-20191030013958-a1ab85dbe136 // indirect
-	golang.org/x/tools v0.1.12 // indirect
+	golang.org/x/exp v0.0.0-20230321023759-10a507213a29 // indirect
+	golang.org/x/tools v0.2.0 // indirect
 )
 
 require (

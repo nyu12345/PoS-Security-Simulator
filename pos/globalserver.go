@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"golang.org/x/exp/slices"
 	"gonum.org/v1/gonum/stat/sampleuv"
 )
 
@@ -47,6 +48,10 @@ var currAttack = ""
 
 var forked bool
 
+var forkedCounter = 0
+
+var ForkedBlockchain = make([][]*Validator, 2)
+
 func Run(runType string, numValidators int, numUsers int, numMal int, comSize int, blockchainType string, attack string) {
 	err := godotenv.Load()
 	if err != nil {
@@ -55,6 +60,9 @@ func Run(runType string, numValidators int, numUsers int, numMal int, comSize in
 	committeeSize = comSize
 
 	currAttack = attack
+	for i := range ForkedBlockchain {
+		ForkedBlockchain[i] = make([]*Validator, numValidators/2)
+	}
 
 	// create genesis block
 	t := time.Now()
@@ -203,22 +211,39 @@ func printInfo() {
 	// }
 
 	//prints Validator balances
-	println("Validator balances")
-	for _, validator := range validators {
-		fmt.Printf("%s: %f, %d, Evil: %t \n", validator.Address[:3], validator.Stake, validator.committeeCount, validator.IsMalicious)
-		printString := ""
-		for _, block := range validator.Blockchain {
-			printString += "->["
-			for _, transaction := range block.Transactions {
-				printString += fmt.Sprintf("%d,", transaction.ID)
-			}
-			printString = printString[:len(printString)-1]
-			printString += "]"
-		}
-		printString = printString[1:]
-		fmt.Printf("VALIDATOR %s BLOCKCHAIN\n", validator.Address[:3])
-		println(printString)
-	}
+	// println("Validator balances")
+	// for _, validator := range validators {
+	// 	fmt.Printf("%s: %f, %d, Evil: %t \n", validator.Address[:3], validator.Stake, validator.committeeCount, validator.IsMalicious)
+	// 	// printString := ""
+	// 	// for _, block := range validator.Blockchain {
+	// 	// 	printString += "->["
+	// 	// 	for _, transaction := range block.Transactions {
+	// 	// 		printString += fmt.Sprintf("%d,", transaction.ID)
+	// 	// 	}
+	// 	// 	printString = printString[:len(printString)-1]
+	// 	// 	printString += "]"
+	// 	// }
+	// 	// printString = printString[1:]
+	// 	// fmt.Printf("VALIDATOR %s BLOCKCHAIN\n", validator.Address[:3])
+	// 	// println(printString)
+	// }
+
+	//prints Forked group
+	// if currAttack == "network_partition" {
+	// 	println("Fork Groups")
+	// 	for i := 0; i < len(ForkedBlockchain); i++ {
+	// 		for j := 0; j < len(ForkedBlockchain[i]); j++ {
+	// 			if ForkedBlockchain[i][j] != nil {
+	// 				var validator = *ForkedBlockchain[i][j]
+	// 				fmt.Printf("%s ", validator.Address[:3])
+	// 			} else {
+	// 				fmt.Printf("nil ")
+	// 			}
+	// 		}
+	// 		fmt.Println()
+	// 	}
+	// }
+
 }
 
 func nextTimeSlot() {
@@ -249,6 +274,12 @@ func nextTimeSlot() {
 
 	//block proposer chooses a new block
 
+	//check what group proposer is in
+	proposerGroup := 1
+	if slices.Contains(ForkedBlockchain[0], proposer) {
+		proposerGroup = 0
+	}
+
 	// oldBlock := Blockchain[len(Blockchain)-1]
 	newBlock, err := generateBlock(proposer)
 	if err != nil {
@@ -270,20 +301,23 @@ func nextTimeSlot() {
 			fmt.Println(err.Error())
 			return
 		}
+	} else {
+		newBlockTwo = Block{}
 	}
 
 	fmt.Printf("Block %d chosen as new block\n", newBlock.Index)
 
 	//validation committee validates blocks
 	//broadcast block to all members of committee
-	for i, validator := range validationCommittee {
-		if currAttack == "network_partition" && evilProposer {
-			msg := ValidateShortAttackBlockMessage{
-				newBlock:    newBlock,
-				newBlockTwo: newBlockTwo,
-				index:       i,
+	for _, validator := range validationCommittee {
+		if currAttack == "network_partition" && evilProposer && !forked {
+			if evilProposer {
+				msg := ValidateShortAttackBlockMessage{
+					newBlock:    newBlock,
+					newBlockTwo: newBlockTwo,
+				}
+				validator.incomingChannel <- msg
 			}
-			validator.incomingChannel <- msg
 		} else {
 			msg := ValidateBlockMessage{
 				newBlock: newBlock,
@@ -299,7 +333,7 @@ func nextTimeSlot() {
 	invalidTwoCount := 0
 	validationResults := make(map[string]bool)
 	validationResultsTwo := make(map[string]bool)
-	for i, validator := range validationCommittee {
+	for _, validator := range validationCommittee {
 		msg := <-validator.outgoingChannel
 		switch msg := msg.(type) { // Use type assertion to determine the type of the received message
 		case ValidationStatusMessage:
@@ -312,18 +346,15 @@ func nextTimeSlot() {
 		case ValidationShortAttackStatusMessage:
 			validationResults[validator.Address] = msg.isValid
 			validationResults[validator.Address] = msg.isValidTwo
-			if i%2 == 0 {
-				if msg.isValid == true {
-					validCount++
-				} else {
-					invalidCount++
-				}
+			if msg.isValid == true {
+				validCount++
 			} else {
-				if msg.isValidTwo == true {
-					validTwoCount++
-				} else {
-					invalidTwoCount++
-				}
+				invalidCount++
+			}
+			if msg.isValidTwo == true {
+				validTwoCount++
+			} else {
+				invalidTwoCount++
 			}
 		default:
 			fmt.Printf("Received an unknown struct: %+v\n", msg)
@@ -331,21 +362,72 @@ func nextTimeSlot() {
 		}
 	}
 
-	if currAttack == "network_partition" {
+	if currAttack == "network_partition" && (forked || evilProposer) {
 		fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nInvalid Two Count: %d\nValid Two Count: %d\nCommittee size: %d\n", invalidCount, validCount, invalidTwoCount, validTwoCount, len(validationCommittee))
 	} else {
 		fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nCommittee size: %d\n", invalidCount, validCount, len(validationCommittee))
 	}
 
-	//add block if majority believe block is valid
-	if currAttack == "network_partition" && evilProposer && !forked {
-		isValid := validCount >= len(validationCommittee)/4
-		isValidTwo := validTwoCount >= len(validationCommittee)/4
+	//chain is forked
+	if forked {
+		println("Chain is forked")
+		isValid := validCount >= len(validationCommittee)/2
+		if isValid {
+			//broadcast the verified transactions to only right branch-- branch with proposer
+			for _, validator := range validators {
+				if slices.Contains(ForkedBlockchain[proposerGroup], validator) {
+					msg := VerifiedShortAttackBlockMessage{
+						transactions: newBlock.Transactions,
+						newBlock:     newBlock,
+					}
+					validator.incomingChannel <- msg
+				}
+			}
+
+			//Update transactional amounts and reward proposer
+			for _, transaction := range newBlock.Transactions {
+				transaction.Sender.Balance -= (transaction.Amount + transaction.Reward)
+				transaction.Receiver.Balance += transaction.Amount
+				proposer.Stake += transaction.Reward
+
+				senderString := fmt.Sprintf("New balance: %f\n", transaction.Sender.Balance)
+				io.WriteString(transaction.Sender.conn, senderString)
+
+				receiverString := fmt.Sprintf("New balance: %f\n", transaction.Receiver.Balance)
+				io.WriteString(transaction.Receiver.conn, receiverString)
+			}
+			println("Valid block added to blockchain")
+		} else {
+			println("Committee votes block invalid")
+			proposer.Stake *= 0.2
+		}
+
+		slashPercentage := 0.2
+		for _, validator := range validationCommittee {
+			if isValid {
+				if validationResults[validator.Address] == false {
+					validator.Stake *= slashPercentage
+				}
+			} else {
+				if validationResults[validator.Address] == true {
+					validator.Stake *= slashPercentage
+				}
+			}
+		}
+
+		printInfo()
+		return
+	}
+
+	//short range attack
+	if currAttack == "network_partition" && evilProposer {
+		isValid := validCount >= len(validationCommittee)/2
+		isValidTwo := validTwoCount >= len(validationCommittee)/2
 
 		if isValid {
-			//broadcast the verified transactions to all blocks
-			for i, validator := range validators {
-				if i%2 == 0 {
+			//broadcast the verified transactions to all blocks within proposer's group
+			for _, validator := range validators {
+				if slices.Contains(ForkedBlockchain[proposerGroup], validator) {
 					msg := VerifiedShortAttackBlockMessage{
 						transactions: newBlock.Transactions,
 						newBlock:     newBlock,
@@ -372,9 +454,9 @@ func nextTimeSlot() {
 			proposer.Stake *= 0.2
 		}
 		if isValidTwo {
-			//broadcast the verified transactions to all blocks
-			for i, validator := range validators {
-				if i%2 == 1 {
+			//broadcast the verified transactions to all blocks not witihin proposer's group
+			for _, validator := range validators {
+				if !slices.Contains(ForkedBlockchain[proposerGroup], validator) {
 					msg := VerifiedShortAttackBlockTwoMessage{
 						transactions: newBlockTwo.Transactions,
 						newBlockTwo:  newBlockTwo,
@@ -423,50 +505,50 @@ func nextTimeSlot() {
 				}
 			}
 		}
+		printInfo()
+		return
 	}
 
-	if !forked {
-		isValid := validCount >= len(validationCommittee)/2
+	isValid := validCount >= len(validationCommittee)/2
+	if isValid {
+		// proposer.Blockchain = append(proposer.Blockchain, newBlock)
+		println("Valid block added to blockchain")
+
+		//broadcast the verified transactions to all blocks
+		msg := VerifiedBlockMessage{
+			transactions: newBlock.Transactions,
+			newBlock:     newBlock,
+		}
+		for _, validator := range validators {
+			validator.incomingChannel <- msg
+		}
+
+		//Update transactional amounts and reward proposer
+		for _, transaction := range newBlock.Transactions {
+			transaction.Sender.Balance -= (transaction.Amount + transaction.Reward)
+			transaction.Receiver.Balance += transaction.Amount
+			proposer.Stake += transaction.Reward
+
+			senderString := fmt.Sprintf("New balance: %f\n", transaction.Sender.Balance)
+			io.WriteString(transaction.Sender.conn, senderString)
+
+			receiverString := fmt.Sprintf("New balance: %f\n", transaction.Receiver.Balance)
+			io.WriteString(transaction.Receiver.conn, receiverString)
+		}
+	} else {
+		println("Committee votes block invalid")
+		proposer.Stake *= 0.2
+	}
+	//punish validators who voted against the majority
+	slashPercentage := 0.2
+	for _, validator := range validationCommittee {
 		if isValid {
-			// proposer.Blockchain = append(proposer.Blockchain, newBlock)
-			println("Valid block added to blockchain")
-
-			//broadcast the verified transactions to all blocks
-			msg := VerifiedBlockMessage{
-				transactions: newBlock.Transactions,
-				newBlock:     newBlock,
-			}
-			for _, validator := range validators {
-				validator.incomingChannel <- msg
-			}
-
-			//Update transactional amounts and reward proposer
-			for _, transaction := range newBlock.Transactions {
-				transaction.Sender.Balance -= (transaction.Amount + transaction.Reward)
-				transaction.Receiver.Balance += transaction.Amount
-				proposer.Stake += transaction.Reward
-
-				senderString := fmt.Sprintf("New balance: %f\n", transaction.Sender.Balance)
-				io.WriteString(transaction.Sender.conn, senderString)
-
-				receiverString := fmt.Sprintf("New balance: %f\n", transaction.Receiver.Balance)
-				io.WriteString(transaction.Receiver.conn, receiverString)
+			if validationResults[validator.Address] == false {
+				validator.Stake *= slashPercentage
 			}
 		} else {
-			println("Committee votes block invalid")
-			proposer.Stake *= 0.2
-		}
-		//punish validators who voted against the majority
-		slashPercentage := 0.2
-		for _, validator := range validationCommittee {
-			if isValid {
-				if validationResults[validator.Address] == false {
-					validator.Stake *= slashPercentage
-				}
-			} else {
-				if validationResults[validator.Address] == true {
-					validator.Stake *= slashPercentage
-				}
+			if validationResults[validator.Address] == true {
+				validator.Stake *= slashPercentage
 			}
 		}
 	}

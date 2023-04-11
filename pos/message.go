@@ -11,7 +11,6 @@ type ValidateBlockMessage struct {
 type ValidateShortAttackBlockMessage struct {
 	newBlock    Block
 	newBlockTwo Block
-	index       int
 }
 
 type ValidationStatusMessage struct {
@@ -21,6 +20,10 @@ type ValidationStatusMessage struct {
 type ValidationShortAttackStatusMessage struct {
 	isValid    bool
 	isValidTwo bool
+}
+
+type ValidationForkedChainStatusMessage struct {
+	isValid bool
 }
 
 type NewTransactionMessage struct {
@@ -39,7 +42,7 @@ type VerifiedShortAttackBlockMessage struct {
 
 type VerifiedShortAttackBlockTwoMessage struct {
 	transactions []Transaction
-	newBlockTwo     Block
+	newBlockTwo  Block
 }
 
 type ConsensusMessage struct {
