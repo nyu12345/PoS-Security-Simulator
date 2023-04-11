@@ -80,17 +80,13 @@ func generateBlock(proposer *Validator) (Block, error) {
 	return newBlock, nil
 }
 
-func balanceAttackIsBlockValid(newBlock Block, fork0Length int, fork1Length int, proposerView int, validator *Validator) bool {
+func balanceAttackIsBlockValid(newBlock Block, malVote bool, malValidator bool) bool {
 	oldBlock := proposer.Blockchain[len(proposer.Blockchain)-1]
 
 	// logic to attempt to balance forks of chain if validator is malicious
-	if validator.IsMalicious{
+	if malValidator{
 		fmt.Println("malicious validator voting to balance forks")
-		if (proposerView == 0 && fork0Length > fork1Length) || (proposerView == 1 && fork1Length > fork0Length) {
-			return false
-		} else {
-			return true
-		}
+		return malVote
 	}
 
 	if oldBlock.Index+1 != newBlock.Index {
@@ -238,8 +234,6 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string, 
 
 	//set view of chain to fork if needed for balance attack
 	if splitView{
-		fmt.Print(isMal)
-		fmt.Println("split honest validator")
 		curValidator.Blockchain = make([]Block, len(balanceAttackFork))
 		copy(curValidator.Blockchain, balanceAttackFork)
 	}else{
@@ -297,8 +291,10 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string, 
 		//Receiving block to validate
 		case ValidateBlockMessage:
 			io.WriteString(conn, "Received a Block to validate\n")
-			// isValid := isBlockValid(msg.newBlock, msg.fork0Length, msg.fork1Length, msg.proposerView, curValidator)
 			isValid := isBlockValid(msg.newBlock)
+			if attackType == "balance"{
+				isValid = balanceAttackIsBlockValid(msg.newBlock, msg.malVote, curValidator.IsMalicious)
+			} 
 			validationStatusMessage := ValidationStatusMessage{
 				isValid: isValid,
 			}
@@ -306,20 +302,26 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string, 
 		//Receiving verified transactions
 		case VerifiedBlockMessage:
 			io.WriteString(conn, "Received verified transaction\n")
-			//put verified transactions into confirmed slice for validator
-			curValidator.transactionPoolLock.Lock()
-			for _, transaction := range msg.transactions {
-				curValidator.confirmedTransactions[transaction.ID] = true
-			}
+			curValidatorLastBlock := curValidator.Blockchain[len(curValidator.Blockchain)-1]
+			if msg.newBlock.PrevHash != curValidatorLastBlock.Hash || msg.newBlock.Index != curValidatorLastBlock.Index + 1 {
+				io.WriteString(conn, "Validator rejected verified block because of different view of chain\n")
+			} else{
+				//put verified transactions into confirmed slice for validator
+				curValidator.transactionPoolLock.Lock()
+				for _, transaction := range msg.transactions {
+					curValidator.confirmedTransactions[transaction.ID] = true
+				}
 
-			//take transactions out of unconfirmed map
-			for _, transaction := range msg.transactions {
-				delete(curValidator.unconfirmedTransactions, transaction.ID)
-			}
-			curValidator.transactionPoolLock.Unlock()
+				//take transactions out of unconfirmed map
+				for _, transaction := range msg.transactions {
+					delete(curValidator.unconfirmedTransactions, transaction.ID)
+				}
+				curValidator.transactionPoolLock.Unlock()
 
-			//add new block
-			curValidator.Blockchain = append(curValidator.Blockchain, msg.newBlock)
+				//add new block
+				curValidator.Blockchain = append(curValidator.Blockchain, msg.newBlock)
+			}
+			
 		case ConsensusMessage:
 			io.WriteString(conn, "Received new consensus state\n")
 

@@ -7,9 +7,9 @@ import (
 func main() {
 	//manual or auto
 	runType := "auto"
-	numValidators := 30
+	numValidators := 9
 	numUsers := 5
-	numMal := 0
+	numMal := 5
 	committeeSize := 3
 	delegateSize := 5
 	//pos or reputation

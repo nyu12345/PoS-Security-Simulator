@@ -6,10 +6,7 @@ type GenesisBlockMessage struct {
 
 type ValidateBlockMessage struct {
 	newBlock Block
-	oldBlock Block
-	fork0Length int
-	fork1Length int
-	proposerView int
+	malVote bool
 }
 
 type ValidationStatusMessage struct {
