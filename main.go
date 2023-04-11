@@ -7,10 +7,10 @@ import (
 func main() {
 	//manual or auto
 	runType := "auto"
-	numValidators := 100
+	numValidators := 10
 	numUsers := 3
 	numMal := 0
-	committeeSize := 50
+	committeeSize := 3
 	//pos, delegated, or reputation
 	blockchainType := "pos"
 	attack := "none"
