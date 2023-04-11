@@ -37,7 +37,6 @@ type Validator struct {
 	blockSuccessCount          int
 	reputation                 float64
 	Blockchain                 []Block
-	blockchainView			int
 }
 
 // generateBlock creates a new block using previous block's hash
@@ -170,7 +169,7 @@ func isTransactionValid(transaction Transaction, validator *Validator) bool {
 	return true
 }
 
-func handleValidatorConnection(conn net.Conn, runType string, malString string) {
+func handleValidatorConnection(conn net.Conn, runType string, malString string, splitView bool) {
 	defer conn.Close()
 
 	//Enter initial stake and whether or not validator is malicious
@@ -235,10 +234,19 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 		committeeCount:             0,
 		proposerCount:              0,
 		reputation:                 5.0,
-		blockchainView:		 	 0,
 	}
-	curValidator.Blockchain = make([]Block, len(CertifiedBlockchain))
-	copy(curValidator.Blockchain, CertifiedBlockchain)
+
+	//set view of chain to fork if needed for balance attack
+	if splitView{
+		fmt.Print(isMal)
+		fmt.Println("split honest validator")
+		curValidator.Blockchain = make([]Block, len(balanceAttackFork))
+		copy(curValidator.Blockchain, balanceAttackFork)
+	}else{
+		curValidator.Blockchain = make([]Block, len(CertifiedBlockchain))
+		copy(curValidator.Blockchain, CertifiedBlockchain)
+	}
+
 	validators = append(validators, curValidator)
 
 	if isMal {
