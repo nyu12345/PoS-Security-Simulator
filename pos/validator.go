@@ -11,6 +11,7 @@ import (
 	"io"
 	"math/rand"
 	"net"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,20 +19,25 @@ import (
 )
 
 type Validator struct {
-	conn                    net.Conn
-	incomingChannel         chan interface{}
-	outgoingChannel         chan interface{}
-	transactionChannel      chan NewTransactionMessage
-	Address                 string
-	Stake                   float64
-	unconfirmedTransactions map[int]Transaction
-	confirmedTransactions   map[int]bool
-	IsMalicious             bool
-	validatorLock           sync.Mutex
+	conn                       net.Conn
+	incomingChannel            chan interface{}
+	outgoingChannel            chan interface{}
+	transactionChannel         chan NewTransactionMessage
+	delegateVoteRequestChannel chan DelegateVoteRequestMessage
+	delegateVoteChannel        chan DelegateVoteMessage
+	Address                    string
+	Stake                      float64
+	unconfirmedTransactions    map[int]Transaction
+	confirmedTransactions      map[int]bool
+	IsMalicious                bool
+	validatorLock              sync.Mutex
+	transactionPoolLock        sync.Mutex
+	committeeCount             int
+	proposerCount              int
+	blockSuccessCount          int
+	reputation                 float64
+	Blockchain                 []Block
 	blockchainView			int
-	committeeCount          int
-	proposerCount           int
-	Blockchain              []Block
 }
 
 // generateBlock creates a new block using previous block's hash
@@ -213,19 +219,23 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 	unconfirmedTransactions := make(map[int]Transaction)
 	confirmedTransactions := make(map[int]bool)
 	curValidator := &Validator{
-		conn:                    conn,
-		incomingChannel:         make(chan interface{}),
-		outgoingChannel:         make(chan interface{}),
-		transactionChannel:      make(chan NewTransactionMessage),
-		Address:                 address,
-		Stake:                   balance,
-		unconfirmedTransactions: unconfirmedTransactions,
-		confirmedTransactions:   confirmedTransactions,
-		IsMalicious:             isMal,
-		validatorLock:           sync.Mutex{},
+		conn:                       conn,
+		incomingChannel:            make(chan interface{}),
+		outgoingChannel:            make(chan interface{}),
+		transactionChannel:         make(chan NewTransactionMessage),
+		delegateVoteRequestChannel: make(chan DelegateVoteRequestMessage),
+		delegateVoteChannel:        make(chan DelegateVoteMessage),
+		Address:                    address,
+		Stake:                      balance,
+		unconfirmedTransactions:    unconfirmedTransactions,
+		confirmedTransactions:      confirmedTransactions,
+		IsMalicious:                isMal,
+		validatorLock:              sync.Mutex{},
+		transactionPoolLock:        sync.Mutex{},
+		committeeCount:             0,
+		proposerCount:              0,
+		reputation:                 5.0,
 		blockchainView:		 	 0,
-		committeeCount:          0,
-		proposerCount:           0,
 	}
 	curValidator.Blockchain = make([]Block, len(CertifiedBlockchain))
 	copy(curValidator.Blockchain, CertifiedBlockchain)
@@ -244,11 +254,31 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 			//Receiving unverified transactions
 			io.WriteString(conn, "Received unverified transaction\n")
 			isValid := isTransactionValid(msg.transaction, curValidator)
-			curValidator.validatorLock.Lock()
+			curValidator.transactionPoolLock.Lock()
 			if isValid {
 				curValidator.unconfirmedTransactions[msg.transaction.ID] = msg.transaction
 			}
-			curValidator.validatorLock.Unlock()
+			curValidator.transactionPoolLock.Unlock()
+		}
+	}()
+
+	//listen for delegate vote requests in delegate vote channel
+	go func() {
+		for {
+			msg := <-curValidator.delegateVoteRequestChannel
+			io.WriteString(conn, "Received delegate vote requests\n")
+			validatorsCopy := make([]*Validator, len(validators))
+			copy(validatorsCopy, validators)
+
+			sort.Slice(validatorsCopy, func(i, j int) bool {
+				return validatorsCopy[i].reputation > validatorsCopy[j].reputation
+			})
+			voteMsg := DelegateVoteMessage{
+				delegateVotes: validatorsCopy[:msg.delegateSize],
+			}
+
+			curValidator.delegateVoteChannel <- voteMsg
+
 		}
 	}()
 
@@ -269,7 +299,7 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 		case VerifiedBlockMessage:
 			io.WriteString(conn, "Received verified transaction\n")
 			//put verified transactions into confirmed slice for validator
-			curValidator.validatorLock.Lock()
+			curValidator.transactionPoolLock.Lock()
 			for _, transaction := range msg.transactions {
 				curValidator.confirmedTransactions[transaction.ID] = true
 			}
@@ -278,7 +308,7 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 			for _, transaction := range msg.transactions {
 				delete(curValidator.unconfirmedTransactions, transaction.ID)
 			}
-			curValidator.validatorLock.Unlock()
+			curValidator.transactionPoolLock.Unlock()
 
 			//add new block
 			curValidator.Blockchain = append(curValidator.Blockchain, msg.newBlock)
@@ -286,18 +316,10 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 			io.WriteString(conn, "Received new consensus state\n")
 
 			//Update blockchain
-			curValidator.Blockchain = make([]Block, len(msg.blockchain))
-			copy(curValidator.Blockchain, msg.blockchain)
+			curValidator.Blockchain = msg.blockchain
+			curValidator.unconfirmedTransactions = msg.unconfirmedTransactions
+			curValidator.confirmedTransactions = msg.confirmedTransactions
 
-			curValidator.unconfirmedTransactions = make(map[int]Transaction)
-			for id, transaction := range msg.unconfirmedTransactions {
-				curValidator.unconfirmedTransactions[id] = transaction
-			}
-
-			curValidator.confirmedTransactions = make(map[int]bool)
-			for id, status := range msg.confirmedTransactions {
-				curValidator.confirmedTransactions[id] = status
-			}
 		default:
 			io.WriteString(conn, "Received an unknown struct: %+v\n")
 		}
