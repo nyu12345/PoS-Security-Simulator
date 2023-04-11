@@ -16,7 +16,8 @@ import (
 )
 
 // Blockchain is a series of validated Blocks
-var Blockchain [][]Block
+var Blockchain []Block
+var balanceBlockchain [][]Block
 
 //Temporary blocks if we want to look into finality attacks
 // var tempChain []Block
@@ -38,24 +39,32 @@ var malValidators = make([]*Validator, 0)
 
 var validatorsSliceLock = &sync.Mutex{}
 
-func Run(runType string, numValidators int, numUsers int, numMal int) {
+func Run(runType string, numValidators int, numUsers int, numMal int, attack string) {
+	
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// create genesis block
-	t := time.Now()
-	genesisBlock0 := Block{}
-	genesisBlock0 = Block{Index: 0, Timestamp: t.String(), Transactions: []Transaction{}, Hash: calculateBlockHash(genesisBlock0), PrevHash: "", Validator: ""}
-	genesisBlockchain0 := []Block{genesisBlock0}
-	Blockchain = append(Blockchain, genesisBlockchain0)
+	if attack == "balance"{
+		// create genesis block
+		t := time.Now()
+		genesisBlock0 := Block{}
+		genesisBlock0 = Block{Index: 0, Timestamp: t.String(), Transactions: []Transaction{}, Hash: calculateBlockHash(genesisBlock0), PrevHash: "", Validator: ""}
+		genesisBlockchain0 := []Block{genesisBlock0}
+		balanceBlockchain = append(balanceBlockchain, genesisBlockchain0)
 
-	// create fork in blockchain for balance attack
-	genesisBlock1 := Block{}
-	genesisBlock1 = Block{Index: 1, Timestamp: t.String(), Transactions: []Transaction{}, Hash: calculateBlockHash(genesisBlock1), PrevHash: "", Validator: ""}
-	genesisBlockchain1 := []Block{genesisBlock1}
-	Blockchain = append(Blockchain, genesisBlockchain1)
+		// create fork in blockchain for balance attack
+		genesisBlock1 := Block{}
+		genesisBlock1 = Block{Index: 1, Timestamp: t.String(), Transactions: []Transaction{}, Hash: calculateBlockHash(genesisBlock1), PrevHash: "", Validator: ""}
+		genesisBlockchain1 := []Block{genesisBlock1}
+		balanceBlockchain = append(balanceBlockchain, genesisBlockchain1)
+	} else{
+		t := time.Now()
+		genesisBlock := Block{}
+		genesisBlock = Block{Index: 0, Timestamp: t.String(), Transactions: []Transaction{}, Hash: calculateBlockHash(genesisBlock), PrevHash: "", Validator: ""}
+		Blockchain = append(Blockchain, genesisBlock)
+	}
 
 	tcpPort := os.Getenv("PORT")
 
@@ -70,7 +79,11 @@ func Run(runType string, numValidators int, numUsers int, numMal int) {
 	//Advances time slots, choosing new proposers that add blocks to the chain and new validation committees
 	go func() {
 		for {
-			nextTimeSlot()
+			if attack == "balance"{
+				balanceAttackNextTimeSlot()
+			} else{
+				nextTimeSlot()
+			}
 		}
 	}()
 
@@ -120,32 +133,47 @@ func Run(runType string, numValidators int, numUsers int, numMal int) {
 
 func printInfo() {
 	//prints blockchain
-	printString1 := ""
-	for _, block := range Blockchain[0] {
-		printString1 += "->["
+	// printString1 := ""
+	// for _, block := range balanceBlockchain[0] {
+	// 	printString1 += "->["
+	// 	for _, transaction := range block.Transactions {
+	// 		printString1 += fmt.Sprintf("%d,", transaction.ID)
+	// 	}
+	// 	printString1 = printString1[:len(printString1)-1]
+	// 	printString1 += "]"
+	// }
+
+	// //build string for fork of blockchain
+	// printString2 := ""
+	// for _, block := range balanceBlockchain[1] {
+	// 	printString2 += "->["
+	// 	for _, transaction := range block.Transactions {
+	// 		printString2 += fmt.Sprintf("%d,", transaction.ID)
+	// 	}
+	// 	printString2 = printString2[:len(printString2)-1]
+	// 	printString2 += "]"
+	// }
+
+	// printString1 = printString1[1:]
+	// printString2 = printString2[1:]
+	// println("BLOCKCHAIN")
+	// println(printString1)
+	// println(printString2)
+
+	//prints blockchain
+	printString := ""
+	for _, block := range balanceBlockchain[0] {
+		printString += "->["
 		for _, transaction := range block.Transactions {
-			printString1 += fmt.Sprintf("%d,", transaction.ID)
+			printString += fmt.Sprintf("%d,", transaction.ID)
 		}
-		printString1 = printString1[:len(printString1)-1]
-		printString1 += "]"
+		printString = printString[:len(printString)-1]
+		printString += "]"
 	}
 
-	//build string for fork of blockchain
-	printString2 := ""
-	for _, block := range Blockchain[1] {
-		printString2 += "->["
-		for _, transaction := range block.Transactions {
-			printString2 += fmt.Sprintf("%d,", transaction.ID)
-		}
-		printString2 = printString2[:len(printString2)-1]
-		printString2 += "]"
-	}
-
-	printString1 = printString1[1:]
-	printString2 = printString2[1:]
+	printString = printString[1:]
 	println("BLOCKCHAIN")
-	println(printString1)
-	println(printString2)
+	println(printString)
 
 	//prints User balances
 	println("User balances")
@@ -160,7 +188,7 @@ func printInfo() {
 	}
 }
 
-func nextTimeSlot() {
+func balanceAttackNextTimeSlot(){
 	//wait 5 seconds every slot
 	time.Sleep(5 * time.Second)
 	fmt.Printf("\nTime slot %s\n\n", time.Now().Format("15:04:05"))
@@ -193,18 +221,38 @@ func nextTimeSlot() {
 	}
 	fmt.Printf("Proposer %s chosen as new block proposer\n", proposer.Address[:3])
 
+	//divide the views of honest validators
+	for i, validator := range validatorsCopy{
+		if i <= len(validatorsCopy)/2{
+			validator.blockchainView = 0
+		}else{
+			validator.blockchainView = 1
+		}
+	}
+
 	//block proposer chooses a new block
 	//different old blocks depending on view of blockchain
-	oldBlock0 := Blockchain[0][len(Blockchain[0])-1]
-	oldBlock1 := Blockchain[1][len(Blockchain[1])-1]
+	oldBlock0 := balanceBlockchain[0][len(balanceBlockchain[0])-1]
+	oldBlock1 := balanceBlockchain[1][len(balanceBlockchain[1])-1]
 	newBlock, err := generateBlock(oldBlock0, proposer)
 	proposerChain := 0
 
-	// if proposer is malicious, generate with other fork's previous block
-	if proposer.IsMalicious {
+	// set proposer chain view
+	if !proposer.IsMalicious{
+		proposerChain = proposer.blockchainView
+
+		// generate new block for fork depending on proposer's view
+		if proposer.blockchainView == 1{
+			newBlock, err = generateBlock(oldBlock1, proposer)
+		}
+	}
+
+	// if proposer is malicious, generate for shorter chain
+	if proposer.IsMalicious && len(balanceBlockchain[1]) <= len(balanceBlockchain[0]){
 		newBlock, err = generateBlock(oldBlock1, proposer)
 		proposerChain = 1
 	} 
+
 	
 	if err != nil {
 		fmt.Println(err.Error())
@@ -224,7 +272,7 @@ func nextTimeSlot() {
 	//broadcast block to all members of committee
 	for _, validator := range validationCommittee {
 		oldBlock := Block{}
-		if validator.IsMalicious{
+		if validator.blockchainView == 1{
 			oldBlock = oldBlock1
 		}else{
 			oldBlock = oldBlock0
@@ -234,8 +282,8 @@ func nextTimeSlot() {
 		msg := ValidateBlockMessage{
 			newBlock: newBlock,
 			oldBlock: oldBlock,
-			fork0Length: len(Blockchain[0]),
-			fork1Length: len(Blockchain[1]),
+			fork0Length: len(balanceBlockchain[0]),
+			fork1Length: len(balanceBlockchain[1]),
 			proposerView: proposerChain,
 		}
 		validator.incomingChannel <- msg
@@ -266,10 +314,10 @@ func nextTimeSlot() {
 	isValid := validCount >= len(validationCommittee)/2
 	if isValid {
 		// append block depending on proposers view of fork
-		if proposer.IsMalicious{
-			Blockchain[1] = append(Blockchain[1], newBlock)
+		if proposerChain == 1{
+			balanceBlockchain[1] = append(balanceBlockchain[1], newBlock)
 		} else{
-			Blockchain[0] = append(Blockchain[0], newBlock)
+			balanceBlockchain[0] = append(balanceBlockchain[0], newBlock)
 		}
 		println("Valid block added to blockchain")
 
@@ -311,6 +359,134 @@ func nextTimeSlot() {
 	}
 
 	printInfo()
+}
+
+func nextTimeSlot() {
+	//wait 5 seconds every slot
+	time.Sleep(5 * time.Second)
+	fmt.Printf("\nTime slot %s\n\n", time.Now().Format("15:04:05"))
+
+	//Choose a new block proposer based on stake
+	validatorsSliceLock.Lock()
+	if len(validators) == 0 {
+		validatorsSliceLock.Unlock()
+		return
+	}
+	validatorsCopy := validators
+	validatorsSliceLock.Unlock()
+
+	totalWeight := 0.0
+	for _, validator := range validatorsCopy {
+		totalWeight += validator.Stake
+	}
+
+	randomNumber := 0.0
+	rand.Seed(time.Now().UnixNano())
+	randomNumber = rand.Float64() * totalWeight
+
+	weightSum := 0.0
+	for _, validator := range validatorsCopy {
+		weightSum += validator.Stake
+		if weightSum >= randomNumber {
+			proposer = validator
+			break
+		}
+	}
+	fmt.Printf("Proposer %s chosen as new block proposer\n", proposer.Address[:3])
+
+	//block proposer chooses a new block
+	oldBlock := Blockchain[len(Blockchain)-1]
+	newBlock, err := generateBlock(oldBlock, proposer)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+
+	fmt.Printf("Block %d chosen as new block\n", newBlock.Index)
+
+	//randomly choose new committee of a third of all validators who will validate the new block
+	rand.Shuffle(len(validatorsCopy), func(i, j int) {
+		validatorsCopy[i], validatorsCopy[j] = validatorsCopy[j], validatorsCopy[i]
+	})
+	validationCommittee = validatorsCopy[:len(validatorsCopy)/3]
+	fmt.Println("New validation committee chosen")
+
+	//validation committee validates blocks
+	//broadcast block to all members of committee
+	for _, validator := range validationCommittee {
+		msg := ValidateBlockMessage{
+			newBlock: newBlock,
+			oldBlock: oldBlock,
+		}
+		validator.incomingChannel <- msg
+	}
+
+	// Process validation results
+	validCount := 0
+	invalidCount := 0
+	validationResults := make(map[string]bool)
+	for _, validator := range validationCommittee {
+		msg := <-validator.outgoingChannel
+		switch msg := msg.(type) { // Use type assertion to determine the type of the received message
+		case ValidationStatusMessage:
+			validationResults[validator.Address] = msg.isValid
+			if msg.isValid == true {
+				validCount++
+			} else {
+				invalidCount++
+			}
+		default:
+			fmt.Printf("Received an unknown struct: %+v\n", msg)
+			fmt.Printf("%T\n", msg)
+		}
+	}
+	fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nCommittee size: %d\n", invalidCount, validCount, len(validationCommittee))
+
+	//add block if majority believe block is valid
+	isValid := validCount >= len(validationCommittee)/2
+	if isValid {
+		Blockchain = append(Blockchain, newBlock)
+		println("Valid block added to blockchain")
+
+		//broadcast the verified transactions to all blocks
+		msg := VerifiedTransactionMessage{
+			transactions: newBlock.Transactions,
+		}
+		for _, validator := range validators {
+			validator.incomingChannel <- msg
+		}
+
+		//Update transactional amounts and reward proposer
+		for _, transaction := range newBlock.Transactions {
+			transaction.Sender.Balance -= (transaction.Amount + transaction.Reward)
+			transaction.Receiver.Balance += transaction.Amount
+			proposer.Stake += transaction.Reward
+
+			senderString := fmt.Sprintf("New balance: %f\n", transaction.Sender.Balance)
+			io.WriteString(transaction.Sender.conn, senderString)
+
+			receiverString := fmt.Sprintf("New balance: %f\n", transaction.Receiver.Balance)
+			io.WriteString(transaction.Receiver.conn, receiverString)
+		}
+	} else {
+		println("Committee votes block invalid")
+	}
+	//punish validators who voted against the majority
+	slashPercentage := 0.2
+	for _, validator := range validationCommittee {
+		if isValid {
+			if validationResults[validator.Address] == false {
+				validator.Stake *= slashPercentage
+			}
+		} else {
+			if validationResults[validator.Address] == true {
+				validator.Stake *= slashPercentage
+			}
+		}
+	}
+
+	printInfo()
+
 
 }
 

@@ -28,6 +28,7 @@ type Validator struct {
 	confirmedTransactions   map[int]bool
 	IsMalicious             bool
 	validatorLock           sync.Mutex
+	blockchainView			int
 }
 
 // generateBlock creates a new block using previous block's hash
@@ -73,9 +74,6 @@ func isBlockValid(newBlock Block, oldBlock Block, fork0Length int, fork1Length i
 	// logic to attempt to balance forks of chain if validator is malicious
 	if validator.IsMalicious{
 		fmt.Println("malicious validator voting to balance forks")
-		println(proposerView)
-		println(fork0Length)
-		println(fork1Length)
 
 		if (proposerView == 0 && fork0Length > fork1Length) || (proposerView == 1 && fork1Length > fork0Length) {
 			return false
@@ -199,6 +197,7 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 		confirmedTransactions:   confirmedTransactions,
 		IsMalicious:             isMal,
 		validatorLock:           sync.Mutex{},
+		blockchainView:		 	 0,
 	}
 	validators = append(validators, curValidator)
 
