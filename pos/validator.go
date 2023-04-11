@@ -29,16 +29,20 @@ type Validator struct {
 	IsMalicious             bool
 	validatorLock           sync.Mutex
 	blockchainView			int
+	committeeCount          int
+	proposerCount           int
+	Blockchain              []Block
 }
 
 // generateBlock creates a new block using previous block's hash
-func generateBlock(oldBlock Block, proposer *Validator) (Block, error) {
+func generateBlock(proposer *Validator) (Block, error) {
 
 	var newBlock Block
 
 	//read transactions from local mempool if there are enough
 	transactions := []Transaction{}
 	if len(proposer.unconfirmedTransactions) > 0 {
+		proposer.validatorLock.Lock()
 		transactionsSize := len(proposer.unconfirmedTransactions)
 		if transactionsSize > 5 {
 			transactionsSize = 5
@@ -49,6 +53,7 @@ func generateBlock(oldBlock Block, proposer *Validator) (Block, error) {
 				break
 			}
 		}
+		proposer.validatorLock.Unlock()
 	} else {
 		//else return an error
 		err := errors.New("No transactions to validate")
@@ -58,30 +63,51 @@ func generateBlock(oldBlock Block, proposer *Validator) (Block, error) {
 	//set block information
 
 	t := time.Now()
-
+	oldBlock := proposer.Blockchain[len(proposer.Blockchain)-1]
 	newBlock.Index = oldBlock.Index + 1
 	newBlock.Timestamp = t.String()
 	newBlock.PrevHash = oldBlock.Hash
 	newBlock.Validator = proposer.Address
 	newBlock.Transactions = transactions
 	newBlock.Hash = calculateBlockHash(newBlock)
+	newBlock.IsMalicious = proposer.IsMalicious
 
 	return newBlock, nil
 }
 
-func isBlockValid(newBlock Block, oldBlock Block, fork0Length int, fork1Length int, proposerView int, validator *Validator) bool {
+func balanceAttackIsBlockValid(newBlock Block, fork0Length int, fork1Length int, proposerView int, validator *Validator) bool {
+	oldBlock := proposer.Blockchain[len(proposer.Blockchain)-1]
 
 	// logic to attempt to balance forks of chain if validator is malicious
 	if validator.IsMalicious{
 		fmt.Println("malicious validator voting to balance forks")
-
 		if (proposerView == 0 && fork0Length > fork1Length) || (proposerView == 1 && fork1Length > fork0Length) {
 			return false
 		} else {
 			return true
 		}
-
 	}
+
+	if oldBlock.Index+1 != newBlock.Index {
+		fmt.Println("old block is not the previous block")
+		return false
+	}
+
+	if oldBlock.Hash != newBlock.PrevHash {
+		fmt.Println("old block hash does not match with the previous hash")
+		return false
+	}
+
+	if calculateBlockHash(newBlock) != newBlock.Hash {
+		fmt.Println("Recomputation of the hash is incorrect")
+		return false
+	}
+
+	return true
+}
+
+func isBlockValid(newBlock Block) bool {
+	oldBlock := proposer.Blockchain[len(proposer.Blockchain)-1]
 
 	if oldBlock.Index+1 != newBlock.Index {
 		fmt.Println("old block is not the previous block")
@@ -198,7 +224,11 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 		IsMalicious:             isMal,
 		validatorLock:           sync.Mutex{},
 		blockchainView:		 	 0,
+		committeeCount:          0,
+		proposerCount:           0,
 	}
+	curValidator.Blockchain = make([]Block, len(CertifiedBlockchain))
+	copy(curValidator.Blockchain, CertifiedBlockchain)
 	validators = append(validators, curValidator)
 
 	if isMal {
@@ -214,9 +244,11 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 			//Receiving unverified transactions
 			io.WriteString(conn, "Received unverified transaction\n")
 			isValid := isTransactionValid(msg.transaction, curValidator)
+			curValidator.validatorLock.Lock()
 			if isValid {
 				curValidator.unconfirmedTransactions[msg.transaction.ID] = msg.transaction
 			}
+			curValidator.validatorLock.Unlock()
 		}
 	}()
 
@@ -227,15 +259,17 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 		//Receiving block to validate
 		case ValidateBlockMessage:
 			io.WriteString(conn, "Received a Block to validate\n")
-			isValid := isBlockValid(msg.newBlock, msg.oldBlock, msg.fork0Length, msg.fork1Length, msg.proposerView, curValidator)
+			// isValid := isBlockValid(msg.newBlock, msg.fork0Length, msg.fork1Length, msg.proposerView, curValidator)
+			isValid := isBlockValid(msg.newBlock)
 			validationStatusMessage := ValidationStatusMessage{
 				isValid: isValid,
 			}
 			curValidator.outgoingChannel <- validationStatusMessage
 		//Receiving verified transactions
-		case VerifiedTransactionMessage:
+		case VerifiedBlockMessage:
 			io.WriteString(conn, "Received verified transaction\n")
 			//put verified transactions into confirmed slice for validator
+			curValidator.validatorLock.Lock()
 			for _, transaction := range msg.transactions {
 				curValidator.confirmedTransactions[transaction.ID] = true
 			}
@@ -243,6 +277,26 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 			//take transactions out of unconfirmed map
 			for _, transaction := range msg.transactions {
 				delete(curValidator.unconfirmedTransactions, transaction.ID)
+			}
+			curValidator.validatorLock.Unlock()
+
+			//add new block
+			curValidator.Blockchain = append(curValidator.Blockchain, msg.newBlock)
+		case ConsensusMessage:
+			io.WriteString(conn, "Received new consensus state\n")
+
+			//Update blockchain
+			curValidator.Blockchain = make([]Block, len(msg.blockchain))
+			copy(curValidator.Blockchain, msg.blockchain)
+
+			curValidator.unconfirmedTransactions = make(map[int]Transaction)
+			for id, transaction := range msg.unconfirmedTransactions {
+				curValidator.unconfirmedTransactions[id] = transaction
+			}
+
+			curValidator.confirmedTransactions = make(map[int]bool)
+			for id, status := range msg.confirmedTransactions {
+				curValidator.confirmedTransactions[id] = status
 			}
 		default:
 			io.WriteString(conn, "Received an unknown struct: %+v\n")
