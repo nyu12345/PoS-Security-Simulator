@@ -41,7 +41,7 @@ var validatorsSliceLock = &sync.Mutex{}
 
 var committeeSize = 0
 
-func Run(runType string, numValidators int, numUsers int, numMal int, comSize int, attack string) {
+func Run(runType string, numValidators int, numUsers int, numMal int, comSize int, blockchainType string, attack string) {
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal(err)
@@ -65,11 +65,23 @@ func Run(runType string, numValidators int, numUsers int, numMal int, comSize in
 	defer server.Close()
 
 	//Advances time slots, choosing new proposers that add blocks to the chain and new validation committees
-	go func() {
-		for {
-			nextTimeSlot()
-		}
-	}()
+	//Standard proof of stake
+	if blockchainType == "pos" {
+		go func() {
+			for {
+				nextTimeSlot()
+			}
+		}()
+	} else if blockchainType == "reputation" {
+		go func() {
+			for {
+				nextTimeSlot()
+			}
+		}()
+	} else {
+		fmt.Println("Invalid blockchain type")
+		return
+	}
 
 	//auto create connections
 	go func() {
@@ -278,6 +290,7 @@ func nextTimeSlot() {
 		}
 	} else {
 		println("Committee votes block invalid")
+		proposer.Stake *= 0.2
 	}
 	//punish validators who voted against the majority
 	slashPercentage := 0.2

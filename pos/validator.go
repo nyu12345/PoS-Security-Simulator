@@ -66,6 +66,7 @@ func generateBlock(oldBlock Block, proposer *Validator) (Block, error) {
 	newBlock.Validator = proposer.Address
 	newBlock.Transactions = transactions
 	newBlock.Hash = calculateBlockHash(newBlock)
+	newBlock.IsMalicious = proposer.IsMalicious
 
 	return newBlock, nil
 }

@@ -13,6 +13,7 @@ type Block struct {
 	Hash         string
 	PrevHash     string
 	Validator    string
+	IsMalicious  bool
 }
 
 // SHA256 hasing
