@@ -7,12 +7,13 @@ import (
 func main() {
 	//manual or auto
 	runType := "auto"
-	numValidators := 10
+	numValidators := 6
 	numUsers := 3
-	numMal := 0
+	numMal := 1
 	committeeSize := 3
 	//pos, delegated, or reputation
 	blockchainType := "pos"
-	attack := "none"
+	//To do short range attack, type "network_partition", else ""
+	attack := "network_partition"
 	pos.Run(runType, numValidators, numUsers, numMal, committeeSize, blockchainType, attack)
 }

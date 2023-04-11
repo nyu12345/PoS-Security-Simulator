@@ -230,6 +230,21 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 				isValid: isValid,
 			}
 			curValidator.outgoingChannel <- validationStatusMessage
+		//Receiving blocks to validate (short attack ed.)
+		case ValidateShortAttackBlockMessage:
+			io.WriteString(conn, "Received both Blocks to validate\n")
+			var isValid bool
+			var isValidTwo bool
+			if msg.index%2 == 0 {
+				isValid = isBlockValid(msg.newBlock)
+			} else {
+				isValidTwo = isBlockValid(msg.newBlockTwo)
+			}
+			validationShortAttackStatusMessage := ValidationShortAttackStatusMessage{
+				isValid:    isValid,
+				isValidTwo: isValidTwo,
+			}
+			curValidator.outgoingChannel <- validationShortAttackStatusMessage
 		//Receiving verified transactions
 		case VerifiedBlockMessage:
 			io.WriteString(conn, "Received verified transaction\n")
