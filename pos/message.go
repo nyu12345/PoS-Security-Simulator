@@ -5,7 +5,7 @@ type GenesisBlockMessage struct {
 }
 
 type ValidateBlockMessage struct {
-	newBlock Block
+	newBlock *Block
 }
 
 type ValidationStatusMessage struct {
@@ -18,11 +18,11 @@ type NewTransactionMessage struct {
 
 type VerifiedBlockMessage struct {
 	transactions []Transaction
-	newBlock     Block
+	newBlock     *Block
 }
 
 type ConsensusMessage struct {
-	blockchain              []Block
+	CurrBlockchain          *Block
 	unconfirmedTransactions map[int]Transaction
 	confirmedTransactions   map[int]bool
 }

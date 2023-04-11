@@ -14,6 +14,9 @@ type Block struct {
 	PrevHash     string
 	Validator    string
 	IsMalicious  bool
+	PrevBlock    *Block
+	NextBlock    *Block
+	CurBlock     *Block
 }
 
 // SHA256 hasing

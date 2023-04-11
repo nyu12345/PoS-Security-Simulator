@@ -36,7 +36,8 @@ type Validator struct {
 	proposerCount              int
 	blockSuccessCount          int
 	reputation                 float64
-	Blockchain                 []Block
+	HeadBlockchain             *Block
+	CurrBlockchain             *Block
 }
 
 // generateBlock creates a new block using previous block's hash
@@ -68,7 +69,7 @@ func generateBlock(proposer *Validator) (Block, error) {
 	//set block information
 
 	t := time.Now()
-	oldBlock := proposer.Blockchain[len(proposer.Blockchain)-1]
+	oldBlock := proposer.CurrBlockchain
 	newBlock.Index = oldBlock.Index + 1
 	newBlock.Timestamp = t.String()
 	newBlock.PrevHash = oldBlock.Hash
@@ -80,8 +81,9 @@ func generateBlock(proposer *Validator) (Block, error) {
 	return newBlock, nil
 }
 
-func isBlockValid(newBlock Block) bool {
-	oldBlock := proposer.Blockchain[len(proposer.Blockchain)-1]
+func isBlockValid(newBlockPtr *Block) bool {
+	newBlock := *newBlockPtr
+	oldBlock := newBlock.PrevBlock
 	if oldBlock.Index+1 != newBlock.Index {
 		fmt.Println("old block is not the previous block")
 		return false
@@ -202,9 +204,9 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 		committeeCount:             0,
 		proposerCount:              0,
 		reputation:                 5.0,
-	}
-	curValidator.Blockchain = make([]Block, len(CertifiedBlockchain))
-	copy(curValidator.Blockchain, CertifiedBlockchain)
+		HeadBlockchain:             CertifiedBlockchain,
+		CurrBlockchain:             CertifiedBlockchain}
+
 	validators = append(validators, curValidator)
 
 	if isMal {
@@ -275,13 +277,15 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 			}
 			curValidator.transactionPoolLock.Unlock()
 
-			//add new block
-			curValidator.Blockchain = append(curValidator.Blockchain, msg.newBlock)
+			//add new block to blockchain and move currBlockchain pointer
+			curValidator.CurrBlockchain.NextBlock = msg.newBlock
+			msg.newBlock.PrevBlock = curValidator.CurrBlockchain
+			curValidator.CurrBlockchain = msg.newBlock
 		case ConsensusMessage:
 			io.WriteString(conn, "Received new consensus state\n")
 
 			//Update blockchain
-			curValidator.Blockchain = msg.blockchain
+			curValidator.CurrBlockchain = msg.CurrBlockchain
 			curValidator.unconfirmedTransactions = msg.unconfirmedTransactions
 			curValidator.confirmedTransactions = msg.confirmedTransactions
 
