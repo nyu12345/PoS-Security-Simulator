@@ -10,7 +10,7 @@ func main() {
 	numValidators := 6
 	numUsers := 3
 	numMal := 2
-	committeeSize := 4
+	committeeSize := 3
 	//pos, delegated, or reputation
 	blockchainType := "pos"
 	//To do short range attack, type "network_partition", else ""

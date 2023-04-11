@@ -45,6 +45,8 @@ var runConsensusCounter = 0
 
 var currAttack = ""
 
+var forked bool
+
 func Run(runType string, numValidators int, numUsers int, numMal int, comSize int, blockchainType string, attack string) {
 	err := godotenv.Load()
 	if err != nil {
@@ -296,6 +298,7 @@ func nextTimeSlot() {
 	validTwoCount := 0
 	invalidTwoCount := 0
 	validationResults := make(map[string]bool)
+	validationResultsTwo := make(map[string]bool)
 	for i, validator := range validationCommittee {
 		msg := <-validator.outgoingChannel
 		switch msg := msg.(type) { // Use type assertion to determine the type of the received message
@@ -308,6 +311,7 @@ func nextTimeSlot() {
 			}
 		case ValidationShortAttackStatusMessage:
 			validationResults[validator.Address] = msg.isValid
+			validationResults[validator.Address] = msg.isValidTwo
 			if i%2 == 0 {
 				if msg.isValid == true {
 					validCount++
@@ -334,7 +338,7 @@ func nextTimeSlot() {
 	}
 
 	//add block if majority believe block is valid
-	if currAttack == "network_partition" && evilProposer {
+	if currAttack == "network_partition" && evilProposer && !forked {
 		isValid := validCount >= len(validationCommittee)/4
 		isValidTwo := validTwoCount >= len(validationCommittee)/4
 
@@ -393,7 +397,35 @@ func nextTimeSlot() {
 			}
 			println("Valid block added to blockchain")
 		}
-	} else {
+		if isValid && isValidTwo {
+			forked = true
+		}
+		//punish validators who voted against the majority
+		slashPercentage := 0.2
+		for _, validator := range validationCommittee {
+			if isValid {
+				if validationResults[validator.Address] == false {
+					validator.Stake *= slashPercentage
+				}
+			} else {
+				if validationResults[validator.Address] == true {
+					validator.Stake *= slashPercentage
+				}
+			}
+
+			if isValidTwo {
+				if validationResultsTwo[validator.Address] == false {
+					validator.Stake *= slashPercentage
+				}
+			} else {
+				if validationResultsTwo[validator.Address] == true {
+					validator.Stake *= slashPercentage
+				}
+			}
+		}
+	}
+
+	if !forked {
 		isValid := validCount >= len(validationCommittee)/2
 		if isValid {
 			// proposer.Blockchain = append(proposer.Blockchain, newBlock)
@@ -489,4 +521,5 @@ func longestChainConsensus() {
 		}
 		validator.incomingChannel <- msg
 	}
+	forked = false
 }
