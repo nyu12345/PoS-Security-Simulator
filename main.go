@@ -7,7 +7,7 @@ import (
 func main() {
 	//manual or auto
 	runType := "auto"
-	numValidators := 6
+	numValidators := 10
 	numUsers := 3
 	numMal := 0
 	committeeSize := numValidators / 3

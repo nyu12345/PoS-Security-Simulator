@@ -179,16 +179,16 @@ func printInfo() {
 	println(printString)
 
 	//prints User balances
-	println("User balances")
-	for user := range users {
-		fmt.Printf("%s: %f\n", users[user].Name, users[user].Balance)
-	}
+	// println("User balances")
+	// for user := range users {
+	// 	fmt.Printf("%s: %f\n", users[user].Name, users[user].Balance)
+	// }
 
 	//prints Validator balances
-	println("Validator balances")
-	for _, validator := range validators {
-		fmt.Printf("%s: %f, %d\n", validator.Address[:3], validator.Stake, validator.committeeCount)
-	}
+	// println("Validator balances")
+	// for _, validator := range validators {
+	// 	fmt.Printf("%s: %f, %d\n", validator.Address[:3], validator.Stake, validator.committeeCount)
+	// }
 }
 
 func nextTimeSlot() {
@@ -197,8 +197,8 @@ func nextTimeSlot() {
 	fmt.Printf("\nTime slot %s\n\n", time.Now().Format("15:04:05"))
 	runConsensusCounter += 1
 
-	if (runConsensusCounter >= 5){
-		longestChainConsensus();
+	if runConsensusCounter >= 5 {
+		longestChainConsensus()
 		runConsensusCounter = 0
 	}
 
@@ -267,7 +267,7 @@ func nextTimeSlot() {
 		//broadcast the verified transactions to all blocks
 		msg := VerifiedBlockMessage{
 			transactions: newBlock.Transactions,
-			newBlock: newBlock,
+			newBlock:     newBlock,
 		}
 		for _, validator := range validators {
 			validator.incomingChannel <- msg
@@ -327,23 +327,29 @@ func handleConnection(conn net.Conn, runType string, connectionType string, malS
 	}
 }
 
-func longestChainConsensus(){
+func longestChainConsensus() {
 	longestLength := -1
 	var longestValidator *Validator = nil
 	for _, validator := range validators {
-		if(len(validator.Blockchain) > longestLength){
+		if len(validator.Blockchain) > longestLength {
 			longestValidator = validator
 			longestLength = len(validator.Blockchain)
 		}
 	}
 
-	CertifiedBlockchain = longestValidator.Blockchain
+	CertifiedBlockchain = make([]Block, len(longestValidator.Blockchain))
+	copy(CertifiedBlockchain, longestValidator.Blockchain)
 
 	for _, validator := range validators {
-		validator.validatorLock.Lock()
-		validator.Blockchain = longestValidator.Blockchain
-		validator.unconfirmedTransactions = longestValidator.unconfirmedTransactions
-		validator.confirmedTransactions = longestValidator.confirmedTransactions
-		validator.validatorLock.Unlock()
+		//broadcast the verified transactions to all blocks
+		if validator.Address == longestValidator.Address {
+			continue
+		}
+		msg := ConsensusMessage{
+			blockchain:              longestValidator.Blockchain,
+			unconfirmedTransactions: longestValidator.unconfirmedTransactions,
+			confirmedTransactions:   longestValidator.confirmedTransactions,
+		}
+		validator.incomingChannel <- msg
 	}
 }

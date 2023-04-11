@@ -18,11 +18,11 @@ type NewTransactionMessage struct {
 
 type VerifiedBlockMessage struct {
 	transactions []Transaction
-	newBlock Block
+	newBlock     Block
 }
 
-type TransactionConsensusMessage struct {
+type ConsensusMessage struct {
+	blockchain              []Block
 	unconfirmedTransactions map[int]Transaction
-	confirmedTransactions map[int]bool
+	confirmedTransactions   map[int]bool
 }
-
