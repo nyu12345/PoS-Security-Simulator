@@ -14,6 +14,6 @@ func main() {
 	delegateSize := 5
 	//pos or reputation
 	blockchainType := "pos"
-	attack := "none"
+	attack := "balance"
 	pos.Run(runType, numValidators, numUsers, numMal, committeeSize, delegateSize, blockchainType, attack)
 }
