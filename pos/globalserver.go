@@ -522,7 +522,7 @@ func printInfo() {
 }
 
 func balanceNextTimeSlot(){
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 	fmt.Printf("\nTime slot %s\n\n", time.Now().Format("15:04:05"))
 	runConsensusCounter += 1
 
@@ -987,7 +987,7 @@ func nextTimeSlot() {
 
 func balanceReputationNextTimeSlot(){
 	//wait 5 seconds every slot
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 	fmt.Printf("\nTime slot %s\n\n", time.Now().Format("15:04:05"))
 	runConsensusCounter += 1
 

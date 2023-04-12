@@ -85,7 +85,6 @@ func balanceAttackIsBlockValid(newBlock Block, malVote bool, malValidator bool) 
 
 	// logic to attempt to balance forks of chain if validator is malicious
 	if malValidator{
-		fmt.Println("malicious validator voting to balance forks")
 		return malVote
 	}
 
