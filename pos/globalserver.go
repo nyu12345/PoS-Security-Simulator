@@ -242,48 +242,6 @@ func chooseBlockProposer() *Validator {
 	return nil
 }
 
-func longestChainConsensus() {
-	longestLength := -1
-	var longestValidator *Validator = nil
-	for _, validator := range validators {
-		if len(validator.Blockchain) > longestLength {
-			longestValidator = validator
-			longestLength = len(validator.Blockchain)
-		}
-	}
-
-	CertifiedBlockchain = make([]Block, len(longestValidator.Blockchain))
-	copy(CertifiedBlockchain, longestValidator.Blockchain)
-
-	for _, validator := range validators {
-		//broadcast the verified transactions to all blocks
-		if validator.Address == longestValidator.Address {
-			continue
-		}
-		blockChainBuffer := make([]Block, len(CertifiedBlockchain))
-		copy(blockChainBuffer, CertifiedBlockchain)
-
-		longestValidator.transactionPoolLock.Lock()
-		unconfirmedTransactionsBuffer := make(map[int]Transaction)
-		for id, transaction := range longestValidator.unconfirmedTransactions {
-			unconfirmedTransactionsBuffer[id] = transaction
-		}
-
-		confirmedTransactionsBuffer := make(map[int]bool)
-		for id, status := range longestValidator.confirmedTransactions {
-			confirmedTransactionsBuffer[id] = status
-		}
-		longestValidator.transactionPoolLock.Unlock()
-
-		msg := ConsensusMessage{
-			blockchain:              CertifiedBlockchain,
-			unconfirmedTransactions: unconfirmedTransactionsBuffer,
-			confirmedTransactions:   confirmedTransactionsBuffer,
-		}
-		validator.incomingChannel <- msg
-	}
-}
-
 func printInfo() {
 	//prints blockchain
 
@@ -820,10 +778,25 @@ func longestChainConsensus() {
 		if validator.Address == longestValidator.Address {
 			continue
 		}
+		blockChainBuffer := make([]Block, len(CertifiedBlockchain))
+		copy(blockChainBuffer, CertifiedBlockchain)
+
+		longestValidator.transactionPoolLock.Lock()
+		unconfirmedTransactionsBuffer := make(map[int]Transaction)
+		for id, transaction := range longestValidator.unconfirmedTransactions {
+			unconfirmedTransactionsBuffer[id] = transaction
+		}
+
+		confirmedTransactionsBuffer := make(map[int]bool)
+		for id, status := range longestValidator.confirmedTransactions {
+			confirmedTransactionsBuffer[id] = status
+		}
+		longestValidator.transactionPoolLock.Unlock()
+
 		msg := ConsensusMessage{
-			blockchain:              longestValidator.Blockchain,
-			unconfirmedTransactions: longestValidator.unconfirmedTransactions,
-			confirmedTransactions:   longestValidator.confirmedTransactions,
+			blockchain:              CertifiedBlockchain,
+			unconfirmedTransactions: unconfirmedTransactionsBuffer,
+			confirmedTransactions:   confirmedTransactionsBuffer,
 		}
 		validator.incomingChannel <- msg
 	}

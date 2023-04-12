@@ -11,9 +11,10 @@ func main() {
 	numUsers := 3
 	numMal := 2
 	committeeSize := 3
+	delegateSize := 5
 	//pos, delegated, or reputation
 	blockchainType := "pos"
 	//To do short range attack, type "network_partition", else ""
 	attack := "network_partition"
-	pos.Run(runType, numValidators, numUsers, numMal, committeeSize, blockchainType, attack)
+	pos.Run(runType, numValidators, numUsers, numMal, committeeSize, delegateSize,  blockchainType, attack)
 }
