@@ -375,8 +375,11 @@ func balanceLongestChainConsensus() {
 		}
 	}
 	if longestLength - secondLongestLength <= 1{
-		fmt.Println("Longest chain consensus delayed, no single branch is the clear winner")
+		fmt.Println("Longest chain consensus delayed")
 	}else{
+		CertifiedBlockchain = make([]Block, len(longestValidator.Blockchain))
+		copy(CertifiedBlockchain, longestValidator.Blockchain)
+
 		for _, validator := range validators {
 			//broadcast the verified transactions to all blocks
 			if validator.Address == longestValidator.Address {
@@ -384,23 +387,27 @@ func balanceLongestChainConsensus() {
 			}
 			blockChainBuffer := make([]Block, len(CertifiedBlockchain))
 			copy(blockChainBuffer, CertifiedBlockchain)
-	
 			longestValidator.transactionPoolLock.Lock()
 			unconfirmedTransactionsBuffer := make(map[int]Transaction)
 			for id, transaction := range longestValidator.unconfirmedTransactions {
 				unconfirmedTransactionsBuffer[id] = transaction
 			}
-	
 			confirmedTransactionsBuffer := make(map[int]bool)
 			for id, status := range longestValidator.confirmedTransactions {
 				confirmedTransactionsBuffer[id] = status
 			}
 			longestValidator.transactionPoolLock.Unlock()
-	
 			validator.Blockchain = blockChainBuffer
 			validator.unconfirmedTransactions = unconfirmedTransactionsBuffer
 			validator.confirmedTransactions = confirmedTransactionsBuffer
 		}
+		//slash fork proposer if there was a fork
+		if forked {
+			fmt.Printf("SLASHED FORK PROPOSER")
+			forkProposer.Stake *= 0.2
+			forkProposer = nil
+		}
+
 		forked = false
 	}
 }
@@ -483,18 +490,18 @@ func printInfo() {
 	println("Validator balances")
 	for _, validator := range validators {
 		fmt.Printf("%s: %f, %d, Evil: %t \n", validator.Address[:3], validator.Stake, validator.committeeCount, validator.IsMalicious)
-		// printString := ""
-		// for _, block := range validator.Blockchain {
-		// 	printString += "->["
-		// 	for _, transaction := range block.Transactions {
-		// 		printString += fmt.Sprintf("%d,", transaction.ID)
-		// 	}
-		// 	printString = printString[:len(printString)-1]
-		// 	printString += "]"
-		// }
-		// printString = printString[1:]
-		// fmt.Printf("VALIDATOR %s BLOCKCHAIN\n", validator.Address[:3])
-		// println(printString)
+		printString := ""
+		for _, block := range validator.Blockchain {
+			printString += "->["
+			for _, transaction := range block.Transactions {
+				printString += fmt.Sprintf("%d,", transaction.ID)
+			}
+			printString = printString[:len(printString)-1]
+			printString += "]"
+		}
+		printString = printString[1:]
+		fmt.Printf("VALIDATOR %s BLOCKCHAIN\n", validator.Address[:3])
+		println(printString)
 	}
 
 	//prints Forked group
