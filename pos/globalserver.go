@@ -70,7 +70,7 @@ var startTime = time.Now()
 
 var blockchainType string
 
-func Run(runType string, numValidators int, numUsers int, numMal int, comSize int, delSize int, blockchainType string, attack string) {
+func Run(runType string, numValidators int, numUsers int, numMal int, comSize int, delSize int, blkChainType string, attack string) {
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal(err)
@@ -79,6 +79,7 @@ func Run(runType string, numValidators int, numUsers int, numMal int, comSize in
 	committeeSize = comSize
 	delegateSize = delSize
 	delegateCounter = 2 * delegateSize
+	blockchainType = blkChainType
 
 	currAttack = attack
 	for i := range ForkedBlockchain {
@@ -474,7 +475,7 @@ func longestChainConsensus() {
 
 	forked = false
 }
-func balancePrintInfo(){
+func balancePrintInfo() {
 	printString := ""
 	for _, block := range CertifiedBlockchain {
 		printString += "->["
@@ -513,7 +514,6 @@ func balancePrintInfo(){
 		println(printString)
 	}
 }
-
 
 func printInfo() {
 	// println("Delegates")

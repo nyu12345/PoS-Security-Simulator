@@ -18,7 +18,7 @@ func main() {
 	//5
 	delegateSize := 3
 	//pos, slashing, or reputation
-	blockchainType := "slashing"
+	blockchainType := "reputation"
 	//network_partition, balance
 	attack := "network_partition"
 	pos.Run(runType, numValidators, numUsers, numMal, committeeSize, delegateSize, blockchainType, attack)
