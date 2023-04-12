@@ -605,7 +605,7 @@ func balanceNextTimeSlot(){
 	fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nCommittee size: %d\n", invalidCount, validCount, len(validationCommittee))
 
 	//add block if majority believe block is valid
-	isValid := validCount >= len(validationCommittee)/2
+	isValid := validCount > len(validationCommittee)/2
 	if isValid {
 		// proposer.Blockchain = append(proposer.Blockchain, newBlock)
 		println("Valid block added to blockchain")
@@ -1069,7 +1069,7 @@ func balanceReputationNextTimeSlot(){
 	fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nCommittee size: %d\n", invalidCount, validCount, len(delegates))
 
 	//add block if majority believe block is valid
-	isValid := validCount >= len(delegates)/2
+	isValid := validCount > len(delegates)/2
 	if isValid {
 		println("Valid block added to blockchain")
 		proposer.blockSuccessCount += 1

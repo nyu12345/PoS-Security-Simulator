@@ -9,11 +9,11 @@ func main() {
 	runType := "auto"
 	numValidators := 10
 	numUsers := 5
-	numMal := 8
-	committeeSize := 4
+	numMal := 3
+	committeeSize := 6
 	delegateSize := 5
 	//pos or reputation
-	blockchainType := "pos"
+	blockchainType := "reputation"
 	attack := "balance"
 	pos.Run(runType, numValidators, numUsers, numMal, committeeSize, delegateSize, blockchainType, attack)
 }
