@@ -111,7 +111,7 @@ func Run(runType string, numValidators int, numUsers int, numMal int, comSize in
 
 	//Advances time slots, choosing new proposers that add blocks to the chain and new validation committees
 	//Standard proof of stake
-	if blockchainType == "pos" {
+	if blockchainType == "pos" || blockchainType == "slashing" {
 		if attack == "balance" {
 			go func() {
 				for {
@@ -300,7 +300,7 @@ func chooseDelegates(validators []*Validator, delegateSize int) []*Validator {
 	delegateResultMap := make(map[string]int)
 	for _, validator := range validators {
 		msg := <-validator.delegateVoteChannel
-		validator.reputation = math.Min(10, validator.reputation+1)
+		validator.reputation = math.Min(100, validator.reputation+1)
 		for _, validatorVoted := range msg.delegateVotes {
 			delegateResultMap[validatorVoted.Address] += 1
 		}
@@ -405,7 +405,12 @@ func balanceLongestChainConsensus() {
 		//slash fork proposer if there was a fork
 		if forked {
 			fmt.Printf("SLASHED FORK PROPOSER")
-			forkProposer.Stake *= 0.2
+			if blockchainType == "slashing" {
+				forkProposer.Stake *= 0.2
+			}
+			if blockchainType == "reputation" {
+				forkProposer.reputation *= 0.2
+			}
 			forkProposer = nil
 		}
 
@@ -453,13 +458,14 @@ func longestChainConsensus() {
 
 	//slash fork proposer if there was a fork
 	if forked {
-		if blockchainType == "pos" {
+		if blockchainType == "pos" || blockchainType == "slashing" {
 			fmt.Printf("SLASHED FORK PROPOSER")
-			forkProposer.Stake *= 0.2
+			if blockchainType == "slashing" {
+				forkProposer.Stake *= 0.2
+			}
 			forkProposer = nil
 		} else if blockchainType == "reputation" {
 			fmt.Printf("SLASHED FORK PROPOSER")
-			forkProposer.Stake *= 0.2
 			forkProposer.reputation *= 0.2
 			forkProposer = nil
 		}
@@ -643,18 +649,24 @@ func balanceNextTimeSlot() {
 		}
 	} else {
 		println("Committee votes block invalid")
-		proposer.Stake *= 0.2
+		if blockchainType == "slashing" {
+			proposer.Stake *= 0.2
+		}
 	}
 	//punish validators who voted against the majority
 	slashPercentage := 0.2
 	for _, validator := range validationCommittee {
 		if isValid {
 			if validationResults[validator.Address] == false {
-				validator.Stake *= slashPercentage
+				if blockchainType == "slashing" {
+					validator.Stake *= slashPercentage
+				}
 			}
 		} else {
 			if validationResults[validator.Address] == true {
-				validator.Stake *= slashPercentage
+				if blockchainType == "slashing" {
+					validator.Stake *= slashPercentage
+				}
 			}
 		}
 	}
@@ -682,9 +694,16 @@ func printEvaluation() {
 }
 
 func nextTimeSlot() {
+
 	//wait 5 seconds every slot
 	time.Sleep(1 * time.Second)
+
+	if len(validators) == 0 {
+		return
+	}
+
 	fmt.Printf("\nTime slot %s\n\n", time.Now().Format("15:04:05"))
+
 	runConsensusCounter += 1
 
 	if runConsensusCounter >= 5 {
@@ -834,18 +853,22 @@ func nextTimeSlot() {
 			println("Valid block added to blockchain")
 		} else {
 			println("Committee votes block invalid")
-			proposer.Stake *= 0.2
+			if blockchainType == "slashing" {
+				proposer.Stake *= 0.2
+			}
 		}
 
-		slashPercentage := 0.2
-		for _, validator := range validationCommittee {
-			if isValid {
-				if validationResults[validator.Address] == false {
-					validator.Stake *= slashPercentage
-				}
-			} else {
-				if validationResults[validator.Address] == true {
-					validator.Stake *= slashPercentage
+		if blockchainType == "slashing" {
+			slashPercentage := 0.2
+			for _, validator := range validationCommittee {
+				if isValid {
+					if validationResults[validator.Address] == false {
+						validator.Stake *= slashPercentage
+					}
+				} else {
+					if validationResults[validator.Address] == true {
+						validator.Stake *= slashPercentage
+					}
 				}
 			}
 		}
@@ -886,7 +909,9 @@ func nextTimeSlot() {
 			println("Valid block added to blockchain")
 		} else {
 			println("Committee votes block invalid")
-			proposer.Stake *= 0.2
+			if blockchainType == "slashing" {
+				proposer.Stake *= 0.2
+			}
 		}
 		if isValidTwo {
 			//broadcast the verified transactions to all blocks not witihin proposer's group
@@ -915,7 +940,9 @@ func nextTimeSlot() {
 			println("Valid block added to blockchain")
 		} else {
 			println("Committee votes block invalid")
-			proposer.Stake *= 0.2
+			if blockchainType == "slashing" {
+				proposer.Stake *= 0.2
+			}
 		}
 		if isValid && isValidTwo {
 			forked = true
@@ -977,7 +1004,9 @@ func nextTimeSlot() {
 		}
 	} else {
 		println("Committee votes block invalid")
-		proposer.Stake *= 0.2
+		if blockchainType == "slashing" {
+			proposer.Stake *= 0.2
+		}
 	}
 	//punish validators who voted against the majority
 	slashPercentage := 0.2
@@ -985,12 +1014,16 @@ func nextTimeSlot() {
 		if isValid {
 			if validationResults[validator.Address] == false {
 				println("VALIDATED FALSE WHEN IT WAS TRUE")
-				validator.Stake *= slashPercentage
+				if blockchainType == "slashing" {
+					validator.Stake *= slashPercentage
+				}
 			}
 		} else {
 			if validationResults[validator.Address] == true {
 				println("VALIDATED TRUE WHEN IT WAS FALSE")
-				validator.Stake *= slashPercentage
+				if blockchainType == "slashing" {
+					validator.Stake *= slashPercentage
+				}
 			}
 		}
 	}
@@ -1084,7 +1117,7 @@ func balanceReputationNextTimeSlot() {
 	if isValid {
 		println("Valid block added to blockchain")
 		proposer.blockSuccessCount += 1
-		proposer.reputation = math.Min(10, proposer.reputation+1)
+		proposer.reputation = math.Min(100, proposer.reputation+1)
 		//broadcast the verified transactions to all blocks
 		msg := VerifiedBlockMessage{
 			transactions: newBlock.Transactions,
@@ -1108,27 +1141,23 @@ func balanceReputationNextTimeSlot() {
 		}
 	} else {
 		println("Committee votes block invalid")
-		proposer.Stake *= 0.2
 		proposer.reputation *= 0.2
 	}
 	//punish validators who voted against the majority
-	slashPercentage := 0.8
 	for _, validator := range delegates {
 		if isValid {
 			//Block was valid, but voted invalid
 			if validationResults[validator.Address] == false {
-				validator.Stake *= slashPercentage
-				validator.reputation *= 0.2
+				validator.reputation *= 0.5
 			} else {
-				validator.reputation = math.Min(10, 1+validator.reputation)
+				validator.reputation = math.Min(100, 1+validator.reputation)
 			}
 		} else {
 			//Block invalid, but voted valid
 			if validationResults[validator.Address] == true {
-				validator.Stake *= slashPercentage
-				validator.reputation *= 0.2
+				validator.reputation *= 0.5
 			} else {
-				validator.reputation = math.Min(10, 1+validator.reputation)
+				validator.reputation = math.Min(100, 1+validator.reputation)
 			}
 		}
 	}
@@ -1350,7 +1379,6 @@ func nextReputationTimeSlot() {
 			}
 		} else {
 			println("Committee votes block invalid")
-			proposer.Stake *= 0.2
 			proposer.reputation *= 0.2
 		}
 		if isValidTwo {
@@ -1383,7 +1411,6 @@ func nextReputationTimeSlot() {
 			println("Valid block added to blockchain")
 		} else {
 			println("Committee votes block invalid")
-			proposer.Stake *= 0.2
 			proposer.reputation *= 0.2
 		}
 		if isValid && isValidTwo {
@@ -1423,25 +1450,21 @@ func nextReputationTimeSlot() {
 		}
 	} else {
 		println("Committee votes block invalid")
-		proposer.Stake *= 0.2
 		proposer.reputation *= 0.2
 	}
 	//punish validators who voted against the majority
-	slashPercentage := 0.8
 	for _, validator := range delegates {
 		if isValid {
 			//Block was valid, but voted invalid
 			if validationResults[validator.Address] == false {
-				validator.Stake *= slashPercentage
-				validator.reputation *= 0.2
+				validator.reputation *= 0.5
 			} else {
 				validator.reputation = math.Min(100, 1+validator.reputation)
 			}
 		} else {
 			//Block invalid, but voted valid
 			if validationResults[validator.Address] == true {
-				validator.Stake *= slashPercentage
-				validator.reputation *= 0.2
+				validator.reputation *= 0.5
 			} else {
 				validator.reputation = math.Min(100, 1+validator.reputation)
 			}

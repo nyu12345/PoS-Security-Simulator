@@ -8,13 +8,13 @@ func main() {
 	//manual or auto
 	runType := "auto"
 	//100
-	numValidators := 10
+	numValidators := 100
 	//10
-	numUsers := 5
+	numUsers := 10
 	//20, 50, 70
-	numMal := 3
+	numMal := 20
 	//20
-	committeeSize := 6
+	committeeSize := 20
 	//5
 	delegateSize := 5
 	//pos, slashing, or reputation
