@@ -54,11 +54,14 @@ var delegateCounter = 0
 
 var roundCount = 0
 
+var startTime = time.Now()
+
 func Run(runType string, numValidators int, numUsers int, numMal int, comSize int, delSize int, blockchainType string, attack string) {
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal(err)
 	}
+	startTime = time.Now()
 	committeeSize = comSize
 	delegateSize = delSize
 	delegateCounter = 2 * delegateSize
@@ -319,7 +322,21 @@ func printInfo() {
 
 func printEvaluation() {
 	//print malicious nodes
-	println("POOP")
+
+	println("\nRESULTS\n")
+	fmt.Printf("Total blocks: %d\n", len(CertifiedBlockchain))
+
+	malBlockCount := 0
+	transactionCount := 0
+	for _, block := range CertifiedBlockchain {
+		if block.IsMalicious {
+			malBlockCount++
+		}
+		transactionCount += len(block.Transactions)
+	}
+	fmt.Printf("Malicious blocks: %d\n", malBlockCount)
+	fmt.Printf("Transactions validated: %d\n", transactionCount)
+	fmt.Printf("Time so far: %f\n", time.Now().Sub(startTime).Seconds())
 }
 
 func nextTimeSlot() {
