@@ -59,6 +59,8 @@ var forkedCounter = 0
 
 var ForkedBlockchain = make([][]*Validator, 2)
 
+var forkProposer *Validator = nil
+
 var delegateCounter = 0
 
 var roundCount = 0
@@ -292,6 +294,14 @@ func longestChainConsensus() {
 		validator.unconfirmedTransactions = unconfirmedTransactionsBuffer
 		validator.confirmedTransactions = confirmedTransactionsBuffer
 	}
+
+	//slash fork proposer if there was a fork
+	if forked {
+		fmt.Printf("SLASHED FORK PROPOSER")
+		forkProposer.Stake *= 0.2
+		forkProposer = nil
+	}
+
 	forked = false
 }
 
@@ -326,18 +336,18 @@ func printInfo() {
 	println("Validator balances")
 	for _, validator := range validators {
 		fmt.Printf("%s: %f, %d, Evil: %t \n", validator.Address[:3], validator.Stake, validator.committeeCount, validator.IsMalicious)
-		printString := ""
-		for _, block := range validator.Blockchain {
-			printString += "->["
-			for _, transaction := range block.Transactions {
-				printString += fmt.Sprintf("%d,", transaction.ID)
-			}
-			printString = printString[:len(printString)-1]
-			printString += "]"
-		}
-		printString = printString[1:]
-		fmt.Printf("VALIDATOR %s BLOCKCHAIN\n", validator.Address[:3])
-		println(printString)
+		// printString := ""
+		// for _, block := range validator.Blockchain {
+		// 	printString += "->["
+		// 	for _, transaction := range block.Transactions {
+		// 		printString += fmt.Sprintf("%d,", transaction.ID)
+		// 	}
+		// 	printString = printString[:len(printString)-1]
+		// 	printString += "]"
+		// }
+		// printString = printString[1:]
+		// fmt.Printf("VALIDATOR %s BLOCKCHAIN\n", validator.Address[:3])
+		// println(printString)
 	}
 
 	//prints Forked group
@@ -611,6 +621,7 @@ func nextTimeSlot() {
 		}
 		if isValid && isValidTwo {
 			forked = true
+			forkProposer = proposer
 		}
 		//punish validators who voted against the majority
 		// slashPercentage := 0.2

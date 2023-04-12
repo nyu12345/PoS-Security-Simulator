@@ -7,13 +7,13 @@ import (
 func main() {
 	//manual or auto
 	runType := "auto"
-	numValidators := 100
+	numValidators := 6
 	numUsers := 5
-	numMal := 0
-	committeeSize := 20
+	numMal := 1
+	committeeSize := 3
 	delegateSize := 5
 	//pos or reputation
 	blockchainType := "pos"
-	attack := "none"
+	attack := "network_partition"
 	pos.Run(runType, numValidators, numUsers, numMal, committeeSize, delegateSize, blockchainType, attack)
 }
