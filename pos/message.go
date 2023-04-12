@@ -9,7 +9,21 @@ type ValidateBlockMessage struct {
 	malVote bool
 }
 
+type ValidateShortAttackBlockMessage struct {
+	newBlock    Block
+	newBlockTwo Block
+}
+
 type ValidationStatusMessage struct {
+	isValid bool
+}
+
+type ValidationShortAttackStatusMessage struct {
+	isValid    bool
+	isValidTwo bool
+}
+
+type ValidationForkedChainStatusMessage struct {
 	isValid bool
 }
 
@@ -22,11 +36,21 @@ type VerifiedBlockMessage struct {
 	newBlock     Block
 }
 
-type ConsensusMessage struct {
-	blockchain              []Block
-	unconfirmedTransactions map[int]Transaction
-	confirmedTransactions   map[int]bool
+type VerifiedShortAttackBlockMessage struct {
+	transactions []Transaction
+	newBlock     Block
 }
+
+type VerifiedShortAttackBlockTwoMessage struct {
+	transactions []Transaction
+	newBlockTwo  Block
+}
+
+// type ConsensusMessage struct {
+// 	blockchain              []Block
+// 	unconfirmedTransactions map[int]Transaction
+// 	confirmedTransactions   map[int]bool
+// }
 
 type DelegateVoteRequestMessage struct {
 	delegateSize int
