@@ -80,8 +80,35 @@ func generateBlock(proposer *Validator) (Block, error) {
 	return newBlock, nil
 }
 
+func balanceAttackIsBlockValid(newBlock Block, malVote bool, malValidator bool) bool {
+	oldBlock := proposer.Blockchain[len(proposer.Blockchain)-1]
+
+	// logic to attempt to balance forks of chain if validator is malicious
+	if malValidator{
+		return malVote
+	}
+
+	if oldBlock.Index+1 != newBlock.Index {
+		fmt.Println("old block is not the previous block")
+		return false
+	}
+
+	if oldBlock.Hash != newBlock.PrevHash {
+		fmt.Println("old block hash does not match with the previous hash")
+		return false
+	}
+
+	if calculateBlockHash(newBlock) != newBlock.Hash {
+		fmt.Println("Recomputation of the hash is incorrect")
+		return false
+	}
+
+	return true
+}
+
 func isBlockValid(newBlock Block) bool {
 	oldBlock := proposer.Blockchain[len(proposer.Blockchain)-1]
+
 	if oldBlock.Index+1 != newBlock.Index {
 		fmt.Println("old block is not the previous block")
 		return false
@@ -137,7 +164,7 @@ func isTransactionValid(transaction Transaction, validator *Validator) bool {
 	return true
 }
 
-func handleValidatorConnection(conn net.Conn, runType string, malString string) {
+func handleValidatorConnection(conn net.Conn, runType string, malString string, splitView bool) {
 	defer conn.Close()
 
 	//Enter initial stake and whether or not validator is malicious
@@ -203,8 +230,16 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 		proposerCount:              0,
 		reputation:                 5.0,
 	}
-	curValidator.Blockchain = make([]Block, len(CertifiedBlockchain))
-	copy(curValidator.Blockchain, CertifiedBlockchain)
+
+	//set view of chain to fork if needed for balance attack
+	if splitView{
+		curValidator.Blockchain = make([]Block, len(balanceAttackFork))
+		copy(curValidator.Blockchain, balanceAttackFork)
+	}else{
+		curValidator.Blockchain = make([]Block, len(CertifiedBlockchain))
+		copy(curValidator.Blockchain, CertifiedBlockchain)
+	}
+
 	validators = append(validators, curValidator)
 
 	ForkedBlockchain[forkedCounter%2][forkedCounter/2] = curValidator
@@ -259,6 +294,9 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 		case ValidateBlockMessage:
 			io.WriteString(conn, "Received a Block to validate\n")
 			isValid := isBlockValid(msg.newBlock)
+			if currAttack == "balance"{
+				isValid = balanceAttackIsBlockValid(msg.newBlock, msg.malVote, curValidator.IsMalicious)
+			} 
 			validationStatusMessage := ValidationStatusMessage{
 				isValid: isValid,
 			}
@@ -276,20 +314,25 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 		//Receiving verified transactions
 		case VerifiedBlockMessage:
 			io.WriteString(conn, "Received verified transaction\n")
-			//put verified transactions into confirmed slice for validator
-			curValidator.transactionPoolLock.Lock()
-			for _, transaction := range msg.transactions {
-				curValidator.confirmedTransactions[transaction.ID] = true
-			}
+			curValidatorLastBlock := curValidator.Blockchain[len(curValidator.Blockchain)-1]
+			if msg.newBlock.PrevHash != curValidatorLastBlock.Hash || msg.newBlock.Index != curValidatorLastBlock.Index + 1 {
+				io.WriteString(conn, "Validator rejected verified block because of different view of chain\n")
+			} else{
+				//put verified transactions into confirmed slice for validator
+				curValidator.transactionPoolLock.Lock()
+				for _, transaction := range msg.transactions {
+					curValidator.confirmedTransactions[transaction.ID] = true
+				}
 
-			//take transactions out of unconfirmed map
-			for _, transaction := range msg.transactions {
-				delete(curValidator.unconfirmedTransactions, transaction.ID)
-			}
-			curValidator.transactionPoolLock.Unlock()
+				//take transactions out of unconfirmed map
+				for _, transaction := range msg.transactions {
+					delete(curValidator.unconfirmedTransactions, transaction.ID)
+				}
+				curValidator.transactionPoolLock.Unlock()
 
-			//add new block
-			curValidator.Blockchain = append(curValidator.Blockchain, msg.newBlock)
+				//add new block
+				curValidator.Blockchain = append(curValidator.Blockchain, msg.newBlock)
+			}
 
 		case VerifiedShortAttackBlockMessage:
 			io.WriteString(conn, "Received verified transaction\n")

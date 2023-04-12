@@ -6,6 +6,7 @@ type GenesisBlockMessage struct {
 
 type ValidateBlockMessage struct {
 	newBlock Block
+	malVote bool
 }
 
 type ValidateShortAttackBlockMessage struct {
