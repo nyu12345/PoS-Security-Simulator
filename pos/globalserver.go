@@ -211,22 +211,22 @@ func printInfo() {
 	// }
 
 	//prints Validator balances
-	// println("Validator balances")
-	// for _, validator := range validators {
-	// 	fmt.Printf("%s: %f, %d, Evil: %t \n", validator.Address[:3], validator.Stake, validator.committeeCount, validator.IsMalicious)
-	// 	// printString := ""
-	// 	// for _, block := range validator.Blockchain {
-	// 	// 	printString += "->["
-	// 	// 	for _, transaction := range block.Transactions {
-	// 	// 		printString += fmt.Sprintf("%d,", transaction.ID)
-	// 	// 	}
-	// 	// 	printString = printString[:len(printString)-1]
-	// 	// 	printString += "]"
-	// 	// }
-	// 	// printString = printString[1:]
-	// 	// fmt.Printf("VALIDATOR %s BLOCKCHAIN\n", validator.Address[:3])
-	// 	// println(printString)
-	// }
+	println("Validator balances")
+	for _, validator := range validators {
+		fmt.Printf("%s: %f, %d, Evil: %t \n", validator.Address[:3], validator.Stake, validator.committeeCount, validator.IsMalicious)
+		printString := ""
+		for _, block := range validator.Blockchain {
+			printString += "->["
+			for _, transaction := range block.Transactions {
+				printString += fmt.Sprintf("%d,", transaction.ID)
+			}
+			printString = printString[:len(printString)-1]
+			printString += "]"
+		}
+		printString = printString[1:]
+		fmt.Printf("VALIDATOR %s BLOCKCHAIN\n", validator.Address[:3])
+		println(printString)
+	}
 
 	//prints Forked group
 	// if currAttack == "network_partition" {
@@ -332,7 +332,7 @@ func nextTimeSlot() {
 	validTwoCount := 0
 	invalidTwoCount := 0
 	validationResults := make(map[string]bool)
-	validationResultsTwo := make(map[string]bool)
+	// validationResultsTwo := make(map[string]bool)
 	for _, validator := range validationCommittee {
 		msg := <-validator.outgoingChannel
 		switch msg := msg.(type) { // Use type assertion to determine the type of the received message
@@ -483,28 +483,28 @@ func nextTimeSlot() {
 			forked = true
 		}
 		//punish validators who voted against the majority
-		slashPercentage := 0.2
-		for _, validator := range validationCommittee {
-			if isValid {
-				if validationResults[validator.Address] == false {
-					validator.Stake *= slashPercentage
-				}
-			} else {
-				if validationResults[validator.Address] == true {
-					validator.Stake *= slashPercentage
-				}
-			}
+		// slashPercentage := 0.2
+		// for _, validator := range validationCommittee {
+		// 	if isValid {
+		// 		if validationResults[validator.Address] == false {
+		// 			validator.Stake *= slashPercentage
+		// 		}
+		// 	} else {
+		// 		if validationResults[validator.Address] == true {
+		// 			validator.Stake *= slashPercentage
+		// 		}
+		// 	}
 
-			if isValidTwo {
-				if validationResultsTwo[validator.Address] == false {
-					validator.Stake *= slashPercentage
-				}
-			} else {
-				if validationResultsTwo[validator.Address] == true {
-					validator.Stake *= slashPercentage
-				}
-			}
-		}
+		// 	if isValidTwo {
+		// 		if validationResultsTwo[validator.Address] == false {
+		// 			validator.Stake *= slashPercentage
+		// 		}
+		// 	} else {
+		// 		if validationResultsTwo[validator.Address] == true {
+		// 			validator.Stake *= slashPercentage
+		// 		}
+		// 	}
+		// }
 		printInfo()
 		return
 	}
@@ -544,10 +544,12 @@ func nextTimeSlot() {
 	for _, validator := range validationCommittee {
 		if isValid {
 			if validationResults[validator.Address] == false {
+				println("VALIDATED FALSE WHEN IT WAS TRUE")
 				validator.Stake *= slashPercentage
 			}
 		} else {
 			if validationResults[validator.Address] == true {
+				println("VALIDATED TRUE WHEN IT WAS FALSE")
 				validator.Stake *= slashPercentage
 			}
 		}
