@@ -9,8 +9,8 @@ func main() {
 	runType := "auto"
 	numValidators := 9
 	numUsers := 5
-	numMal := 5
-	committeeSize := 3
+	numMal := 3
+	committeeSize := 4
 	delegateSize := 5
 	//pos or reputation
 	blockchainType := "pos"

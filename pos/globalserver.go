@@ -122,50 +122,37 @@ func Run(runType string, numValidators int, numUsers int, numMal int, comSize in
 			return
 		}
 
-		// split views of validators if balance attack
-		viewForkedChain := false
-		numHonestValidators := numValidators - numMal
-		honestValidatorsSplit := 0
-		
-		for numValidators > 0 {
-
-			// make only half of the validators see one side of fork for balance attack
-			if attack == "balance" && numMal == 0 && honestValidatorsSplit <= numHonestValidators/2 {
-				viewForkedChain = true
-			}else{
-				viewForkedChain = false
+		if attack == "balance"{
+			createBalanceAttackConnections(numValidators, numMal, runType, numUsers)
+		} else{
+			for numValidators > 0 {
+				conn, err := net.Dial("tcp", ":9000")
+				if err != nil {
+					fmt.Println("Error connecting:", err)
+					return
+				}
+				malString := "n"
+				if numMal > 0 {
+					malString = "y"
+					numMal--
+				}
+				go handleConnection(conn, runType, "v", malString, false)
+				numValidators--
 			}
-
-			conn, err := net.Dial("tcp", ":9000")
-			if err != nil {
-				fmt.Println("Error connecting:", err)
-				return
+			for numUsers > 0 {
+				conn, err := net.Dial("tcp", ":9000")
+				if err != nil {
+					fmt.Println("Error connecting:", err)
+					return
+				}
+				if err != nil {
+					log.Fatal(err)
+				}
+				go handleConnection(conn, runType, "u", "", false)
+				numUsers--
 			}
-			malString := "n"
-			if numMal > 0 {
-				malString = "y"
-				numMal--
-			}else{
-				honestValidatorsSplit++
-			}
-
-			go handleConnection(conn, runType, "v", malString, viewForkedChain)
-			numValidators--
-		}
-		for numUsers > 0 {
-			conn, err := net.Dial("tcp", ":9000")
-			if err != nil {
-				fmt.Println("Error connecting:", err)
-				return
-			}
-			if err != nil {
-				log.Fatal(err)
-			}
-			go handleConnection(conn, runType, "u", "", viewForkedChain)
-			numUsers--
 		}
 	}()
-
 	//Accepts connections joining the network
 	for {
 		conn, err := server.Accept()
@@ -175,6 +162,58 @@ func Run(runType string, numValidators int, numUsers int, numMal int, comSize in
 		go handleConnection(conn, runType, "", "", false)
 	}
 
+}
+
+func createBalanceAttackConnections(numValidators int, numMal int, runType string, numUsers int){
+	// split views of validators if balance attack
+	viewForkedChain := false
+	numHonestValidators := numValidators - numMal
+	honestValidatorsSplit := 0
+	malValidatorsSplit := 0
+	originalNumMal := numMal
+	
+	for numValidators > 0 {
+
+		// make only half of the validators see one side of fork for balance attack
+		if numMal == 0 && honestValidatorsSplit <= numHonestValidators/2 {
+			viewForkedChain = true
+		}else if numMal > 0 && malValidatorsSplit < originalNumMal/2 {
+			viewForkedChain = true
+		}else{
+			viewForkedChain = false
+		}
+
+		conn, err := net.Dial("tcp", ":9000")
+		if err != nil {
+			fmt.Println("Error connecting:", err)
+			return
+		}
+		malString := "n"
+		if numMal > 0 {
+			malString = "y"
+			numMal--
+			if viewForkedChain{
+				malValidatorsSplit++
+			}
+		}else{
+			honestValidatorsSplit++
+		}
+
+		go handleConnection(conn, runType, "v", malString, viewForkedChain)
+		numValidators--
+	}
+	for numUsers > 0 {
+		conn, err := net.Dial("tcp", ":9000")
+		if err != nil {
+			fmt.Println("Error connecting:", err)
+			return
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+		go handleConnection(conn, runType, "u", "", viewForkedChain)
+		numUsers--
+	}
 }
 
 func chooseValidationCommittee(validators []*Validator, committeeSize int) []*Validator {
@@ -263,6 +302,71 @@ func chooseBlockProposer() *Validator {
 		}
 	}
 	return nil
+}
+
+func balanceLongestChainConsensus() {
+	longestLength := -1
+	secondLongestLength := -1
+	var longestValidator *Validator = nil
+	for _, validator := range validators {
+		// + 1 to check for second longest chain for balance attack
+		if len(validator.Blockchain) + 1 >= longestLength{
+			if longestLength == -1 && len(validator.Blockchain) > longestLength{
+				longestValidator = validator
+				longestLength = len(validator.Blockchain)
+				continue
+			}
+
+			longestValidatorLastBlock := longestValidator.Blockchain[len(longestValidator.Blockchain)-1]
+			curValidatorLastBlock := validator.Blockchain[len(validator.Blockchain)-1]
+
+			if longestValidatorLastBlock.Hash != curValidatorLastBlock.Hash{
+				if len(validator.Blockchain) > longestLength{
+					secondLongestLength = longestLength
+					longestValidator = validator
+					longestLength = len(validator.Blockchain)
+				}else{
+					secondLongestLength = len(validator.Blockchain)
+				}
+			}
+		}
+	}
+	fmt.Println(longestLength)
+	fmt.Println(secondLongestLength)
+	if longestLength - secondLongestLength <= 1{
+		fmt.Println("Longest chain consensus delayed, no single branch is the clear winner")
+	}else{
+		CertifiedBlockchain = make([]Block, len(longestValidator.Blockchain))
+		copy(CertifiedBlockchain, longestValidator.Blockchain)
+
+		for _, validator := range validators {
+			//broadcast the verified transactions to all blocks
+			if validator.Address == longestValidator.Address {
+				continue
+			}
+			blockChainBuffer := make([]Block, len(CertifiedBlockchain))
+			copy(blockChainBuffer, CertifiedBlockchain)
+
+			longestValidator.transactionPoolLock.Lock()
+			unconfirmedTransactionsBuffer := make(map[int]Transaction)
+			for id, transaction := range longestValidator.unconfirmedTransactions {
+				unconfirmedTransactionsBuffer[id] = transaction
+			}
+
+			confirmedTransactionsBuffer := make(map[int]bool)
+			for id, status := range longestValidator.confirmedTransactions {
+				confirmedTransactionsBuffer[id] = status
+			}
+			longestValidator.transactionPoolLock.Unlock()
+
+			msg := ConsensusMessage{
+				blockchain:              CertifiedBlockchain,
+				unconfirmedTransactions: unconfirmedTransactionsBuffer,
+				confirmedTransactions:   confirmedTransactionsBuffer,
+			}
+			validator.incomingChannel <- msg
+		}
+	}
 }
 
 func longestChainConsensus() {
@@ -358,7 +462,6 @@ func printBlockchain(chain []Block){
 	}
 
 	printString = printString[1:]
-	println("BLOCKCHAIN")
 	println(printString)
 }
 
@@ -368,7 +471,7 @@ func balanceNextTimeSlot(){
 	runConsensusCounter += 1
 
 	if runConsensusCounter >= 5 {
-		longestChainConsensus()
+		balanceLongestChainConsensus()
 		runConsensusCounter = 0
 	}
 
