@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"math/rand"
 	"net"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +28,9 @@ var CertifiedBlockchain []Block
 // Slice of validator pointers
 var validators = make([]*Validator, 0)
 
+// Slice of delegate pointers
+var delegates = make([]*Validator, 0)
+
 // Slice of user pointers who can make transactions
 var users = make(map[string]*User)
 
@@ -42,6 +47,8 @@ var validatorsSliceLock = &sync.Mutex{}
 
 var committeeSize = 0
 
+var delegateSize = 0
+
 var runConsensusCounter = 0
 
 var currAttack = ""
@@ -52,12 +59,16 @@ var forkedCounter = 0
 
 var ForkedBlockchain = make([][]*Validator, 2)
 
-func Run(runType string, numValidators int, numUsers int, numMal int, comSize int, blockchainType string, attack string) {
+var delegateCounter = 0
+
+func Run(runType string, numValidators int, numUsers int, numMal int, comSize int, delSize int, blockchainType string, attack string) {
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal(err)
 	}
 	committeeSize = comSize
+	delegateSize = delSize
+	delegateCounter = 2 * delegateSize
 
 	currAttack = attack
 	for i := range ForkedBlockchain {
@@ -91,7 +102,7 @@ func Run(runType string, numValidators int, numUsers int, numMal int, comSize in
 	} else if blockchainType == "reputation" {
 		go func() {
 			for {
-				nextTimeSlot()
+				nextReputationTimeSlot()
 			}
 		}()
 	} else {
@@ -165,6 +176,48 @@ func chooseValidationCommittee(validators []*Validator, committeeSize int) []*Va
 	return validationCommittee
 }
 
+func chooseDelegates(validators []*Validator, delegateSize int) []*Validator {
+
+	validatorMap := make(map[string]*Validator)
+
+	//send delegate vote requests to all validators
+	validatorsSliceLock.Lock()
+	for _, validator := range validators {
+		validatorMap[validator.Address] = validator
+		msg := DelegateVoteRequestMessage{
+			delegateSize: delegateSize,
+		}
+		validator.delegateVoteRequestChannel <- msg
+	}
+	validatorsSliceLock.Unlock()
+	//Recieve and tally up votes, punishing those who voted for someone with less reputation
+	delegateResultMap := make(map[string]int)
+	for _, validator := range validators {
+		msg := <-validator.delegateVoteChannel
+		validator.reputation = math.Min(10, validator.reputation+1)
+		for _, validatorVoted := range msg.delegateVotes {
+			delegateResultMap[validatorVoted.Address] += 1
+		}
+	}
+	//select the winners
+	validatorAddresses := make([]string, len(delegateResultMap))
+	for va := range delegateResultMap {
+		validatorAddresses = append(validatorAddresses, va)
+	}
+
+	sort.Slice(validatorAddresses, func(i, j int) bool {
+		return delegateResultMap[validatorAddresses[i]] > delegateResultMap[validatorAddresses[j]]
+	})
+
+	validatorAddresses = validatorAddresses[:delegateSize]
+	delegates = make([]*Validator, 0)
+	for _, validatorAddress := range validatorAddresses {
+		delegates = append(delegates, validatorMap[validatorAddress])
+	}
+	return delegates
+
+}
+
 func chooseBlockProposer() *Validator {
 	if len(validationCommittee) == 0 {
 		return nil
@@ -189,8 +242,56 @@ func chooseBlockProposer() *Validator {
 	return nil
 }
 
+func longestChainConsensus() {
+	longestLength := -1
+	var longestValidator *Validator = nil
+	for _, validator := range validators {
+		if len(validator.Blockchain) > longestLength {
+			longestValidator = validator
+			longestLength = len(validator.Blockchain)
+		}
+	}
+
+	CertifiedBlockchain = make([]Block, len(longestValidator.Blockchain))
+	copy(CertifiedBlockchain, longestValidator.Blockchain)
+
+	for _, validator := range validators {
+		//broadcast the verified transactions to all blocks
+		if validator.Address == longestValidator.Address {
+			continue
+		}
+		blockChainBuffer := make([]Block, len(CertifiedBlockchain))
+		copy(blockChainBuffer, CertifiedBlockchain)
+
+		longestValidator.transactionPoolLock.Lock()
+		unconfirmedTransactionsBuffer := make(map[int]Transaction)
+		for id, transaction := range longestValidator.unconfirmedTransactions {
+			unconfirmedTransactionsBuffer[id] = transaction
+		}
+
+		confirmedTransactionsBuffer := make(map[int]bool)
+		for id, status := range longestValidator.confirmedTransactions {
+			confirmedTransactionsBuffer[id] = status
+		}
+		longestValidator.transactionPoolLock.Unlock()
+
+		msg := ConsensusMessage{
+			blockchain:              CertifiedBlockchain,
+			unconfirmedTransactions: unconfirmedTransactionsBuffer,
+			confirmedTransactions:   confirmedTransactionsBuffer,
+		}
+		validator.incomingChannel <- msg
+	}
+}
+
 func printInfo() {
 	//prints blockchain
+
+	// println("Delegates")
+	// for _, delegate := range delegates {
+	// 	println(delegate.Address[:3])
+	// }
+
 	printString := ""
 	for _, block := range CertifiedBlockchain {
 		printString += "->["
@@ -243,7 +344,6 @@ func printInfo() {
 	// 		fmt.Println()
 	// 	}
 	// }
-
 }
 
 func nextTimeSlot() {
@@ -513,6 +613,7 @@ func nextTimeSlot() {
 	if isValid {
 		// proposer.Blockchain = append(proposer.Blockchain, newBlock)
 		println("Valid block added to blockchain")
+		proposer.blockSuccessCount += 1
 
 		//broadcast the verified transactions to all blocks
 		msg := VerifiedBlockMessage{
@@ -559,6 +660,128 @@ func nextTimeSlot() {
 
 }
 
+func nextReputationTimeSlot() {
+	//wait 5 seconds every slot
+	time.Sleep(5 * time.Second)
+	fmt.Printf("\nTime slot %s\n\n", time.Now().Format("15:04:05"))
+	runConsensusCounter += 1
+
+	if runConsensusCounter >= 5 {
+		longestChainConsensus()
+		runConsensusCounter = 0
+	}
+
+	//Choose new delegates
+	if delegateCounter == 2*delegateSize {
+		delegateCounter = 0
+		delegates = chooseDelegates(validators, delegateSize)
+		fmt.Println("New delegates chosen")
+	}
+
+	//Choose next sequential block proposer from delegates
+	proposer = delegates[delegateCounter%delegateSize]
+	delegateCounter += 1
+	proposer.proposerCount += 1
+	fmt.Printf("Proposer %s chosen as new block proposer\n", proposer.Address[:3])
+
+	//block proposer chooses a new block
+
+	newBlock, err := generateBlock(proposer)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+
+	fmt.Printf("Block %d chosen as new block\n", newBlock.Index)
+
+	//validation committee validates blocks
+	//broadcast block to all members of committee
+	for _, validator := range delegates {
+		msg := ValidateBlockMessage{
+			newBlock: newBlock,
+		}
+		validator.incomingChannel <- msg
+	}
+
+	// Process validation results
+	validCount := 0
+	invalidCount := 0
+	validationResults := make(map[string]bool)
+	for _, validator := range delegates {
+		msg := <-validator.outgoingChannel
+		switch msg := msg.(type) { // Use type assertion to determine the type of the received message
+		case ValidationStatusMessage:
+			validationResults[validator.Address] = msg.isValid
+			if msg.isValid == true {
+				validCount++
+			} else {
+				invalidCount++
+			}
+		default:
+			fmt.Printf("Received an unknown struct: %+v\n", msg)
+			fmt.Printf("%T\n", msg)
+		}
+	}
+	// fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nCommittee size: %d\n", invalidCount, validCount, len(validationCommittee))
+
+	//add block if majority believe block is valid
+	isValid := validCount >= len(validationCommittee)/2
+	if isValid {
+		println("Valid block added to blockchain")
+		proposer.blockSuccessCount += 1
+		proposer.reputation = math.Min(10, proposer.reputation+1)
+		//broadcast the verified transactions to all blocks
+		msg := VerifiedBlockMessage{
+			transactions: newBlock.Transactions,
+			newBlock:     newBlock,
+		}
+		for _, validator := range validators {
+			validator.incomingChannel <- msg
+		}
+
+		//Update transactional amounts and reward proposer
+		for _, transaction := range newBlock.Transactions {
+			transaction.Sender.Balance -= (transaction.Amount + transaction.Reward)
+			transaction.Receiver.Balance += transaction.Amount
+			proposer.Stake += transaction.Reward
+
+			senderString := fmt.Sprintf("New balance: %f\n", transaction.Sender.Balance)
+			io.WriteString(transaction.Sender.conn, senderString)
+
+			receiverString := fmt.Sprintf("New balance: %f\n", transaction.Receiver.Balance)
+			io.WriteString(transaction.Receiver.conn, receiverString)
+		}
+	} else {
+		println("Committee votes block invalid")
+		proposer.Stake *= 0.2
+		proposer.reputation *= 0.2
+	}
+	//punish validators who voted against the majority
+	slashPercentage := 0.8
+	for _, validator := range delegates {
+		if isValid {
+			//Block was valid, but voted invalid
+			if validationResults[validator.Address] == false {
+				validator.Stake *= slashPercentage
+				validator.reputation *= 0.2
+			} else {
+				validator.reputation = math.Min(10, 1+validator.reputation)
+			}
+		} else {
+			//Block invalid, but voted valid
+			if validationResults[validator.Address] == true {
+				validator.Stake *= slashPercentage
+				validator.reputation *= 0.2
+			} else {
+				validator.reputation = math.Min(10, 1+validator.reputation)
+			}
+		}
+	}
+
+	printInfo()
+
+}
+
 func handleConnection(conn net.Conn, runType string, connectionType string, malString string) {
 	defer conn.Close()
 
@@ -579,7 +802,6 @@ func handleConnection(conn net.Conn, runType string, connectionType string, malS
 		break
 	}
 }
-
 func longestChainConsensus() {
 	longestLength := -1
 	var longestValidator *Validator = nil
