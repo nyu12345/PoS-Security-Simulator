@@ -468,6 +468,46 @@ func longestChainConsensus() {
 
 	forked = false
 }
+func balancePrintInfo(){
+	printString := ""
+	for _, block := range CertifiedBlockchain {
+		printString += "->["
+		for _, transaction := range block.Transactions {
+			printString += fmt.Sprintf("%d,", transaction.ID)
+		}
+		printString = printString[:len(printString)-1]
+		printString += "]"
+	}
+
+	printString = printString[1:]
+	println("BLOCKCHAIN")
+	println(printString)
+
+	//prints User balances
+	// println("User balances")
+	// for user := range users {
+	// 	fmt.Printf("%s: %f\n", users[user].Name, users[user].Balance)
+	// }
+
+	//prints Validator balances
+	println("Validator balances")
+	for _, validator := range validators {
+		fmt.Printf("%s: %f, %d, Evil: %t \n", validator.Address[:3], validator.Stake, validator.committeeCount, validator.IsMalicious)
+		printString := ""
+		for _, block := range validator.Blockchain {
+			printString += "->["
+			for _, transaction := range block.Transactions {
+				printString += fmt.Sprintf("%d,", transaction.ID)
+			}
+			printString = printString[:len(printString)-1]
+			printString += "]"
+		}
+		printString = printString[1:]
+		fmt.Printf("VALIDATOR %s BLOCKCHAIN\n", validator.Address[:3])
+		println(printString)
+	}
+}
+
 
 func printInfo() {
 	// println("Delegates")
@@ -659,7 +699,7 @@ func balanceNextTimeSlot() {
 		}
 	}
 
-	printInfo()
+	balancePrintInfo()
 }
 
 func printEvaluation() {
@@ -1140,7 +1180,7 @@ func balanceReputationNextTimeSlot() {
 		}
 	}
 
-	printInfo()
+	balancePrintInfo()
 
 }
 
