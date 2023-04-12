@@ -207,6 +207,9 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 	copy(curValidator.Blockchain, CertifiedBlockchain)
 	validators = append(validators, curValidator)
 
+	ForkedBlockchain[forkedCounter%2][forkedCounter/2] = curValidator
+	forkedCounter += 1
+
 	if isMal {
 		malValidators = append(malValidators, curValidator)
 	}
@@ -260,6 +263,16 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 				isValid: isValid,
 			}
 			curValidator.outgoingChannel <- validationStatusMessage
+		//Receiving blocks to validate (short attack ed.)
+		case ValidateShortAttackBlockMessage:
+			io.WriteString(conn, "Received both Blocks to validate\n")
+			isValid := isBlockValid(msg.newBlock)
+			isValidTwo := isBlockValid(msg.newBlockTwo)
+			validationShortAttackStatusMessage := ValidationShortAttackStatusMessage{
+				isValid:    isValid,
+				isValidTwo: isValidTwo,
+			}
+			curValidator.outgoingChannel <- validationShortAttackStatusMessage
 		//Receiving verified transactions
 		case VerifiedBlockMessage:
 			io.WriteString(conn, "Received verified transaction\n")
@@ -277,6 +290,40 @@ func handleValidatorConnection(conn net.Conn, runType string, malString string) 
 
 			//add new block
 			curValidator.Blockchain = append(curValidator.Blockchain, msg.newBlock)
+
+		case VerifiedShortAttackBlockMessage:
+			io.WriteString(conn, "Received verified transaction\n")
+			//put verified transactions into confirmed slice for validator
+			curValidator.validatorLock.Lock()
+			for _, transaction := range msg.transactions {
+				curValidator.confirmedTransactions[transaction.ID] = true
+			}
+
+			//take transactions out of unconfirmed map
+			for _, transaction := range msg.transactions {
+				delete(curValidator.unconfirmedTransactions, transaction.ID)
+			}
+			curValidator.validatorLock.Unlock()
+
+			//add new block
+			curValidator.Blockchain = append(curValidator.Blockchain, msg.newBlock)
+		case VerifiedShortAttackBlockTwoMessage:
+			io.WriteString(conn, "Received verified transaction\n")
+			//put verified transactions into confirmed slice for validator
+			curValidator.validatorLock.Lock()
+			for _, transaction := range msg.transactions {
+				curValidator.confirmedTransactions[transaction.ID] = true
+			}
+
+			//take transactions out of unconfirmed map
+			for _, transaction := range msg.transactions {
+				delete(curValidator.unconfirmedTransactions, transaction.ID)
+			}
+			curValidator.validatorLock.Unlock()
+
+			//add new block
+			curValidator.Blockchain = append(curValidator.Blockchain, msg.newBlockTwo)
+
 		case ConsensusMessage:
 			io.WriteString(conn, "Received new consensus state\n")
 
