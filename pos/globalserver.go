@@ -502,22 +502,22 @@ func printInfo() {
 	// }
 
 	//prints Validator balances
-	// println("Validator balances")
-	// for _, validator := range validators {
-	// 	fmt.Printf("%s: %f, %d, Evil: %t \n", validator.Address[:3], validator.Stake, validator.committeeCount, validator.IsMalicious)
-	// 	printString := ""
-	// 	for _, block := range validator.Blockchain {
-	// 		printString += "->["
-	// 		for _, transaction := range block.Transactions {
-	// 			printString += fmt.Sprintf("%d,", transaction.ID)
-	// 		}
-	// 		printString = printString[:len(printString)-1]
-	// 		printString += "]"
-	// 	}
-	// 	printString = printString[1:]
-	// 	fmt.Printf("VALIDATOR %s BLOCKCHAIN\n", validator.Address[:3])
-	// 	println(printString)
-	// }
+	println("Validator balances")
+	for _, validator := range validators {
+		fmt.Printf("%s: %f, %f\n", validator.Address[:3], validator.Stake, validator.reputation)
+		// printString := ""
+		// for _, block := range validator.Blockchain {
+		// 	printString += "->["
+		// 	for _, transaction := range block.Transactions {
+		// 		printString += fmt.Sprintf("%d,", transaction.ID)
+		// 	}
+		// 	printString = printString[:len(printString)-1]
+		// 	printString += "]"
+		// }
+		// printString = printString[1:]
+		// fmt.Printf("VALIDATOR %s BLOCKCHAIN\n", validator.Address[:3])
+		// println(printString)
+	}
 
 	//prints Forked group
 	// if currAttack == "network_partition" {
@@ -617,7 +617,7 @@ func balanceNextTimeSlot() {
 		}
 	}
 
-	fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nCommittee size: %d\n", invalidCount, validCount, len(validationCommittee))
+	// fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nCommittee size: %d\n", invalidCount, validCount, len(validationCommittee))
 
 	//add block if majority believe block is valid
 	isValid := validCount > len(validationCommittee)/2
@@ -817,9 +817,9 @@ func nextTimeSlot() {
 	}
 
 	if currAttack == "network_partition" && (forked || evilProposer) {
-		fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nInvalid Two Count: %d\nValid Two Count: %d\nCommittee size: %d\n", invalidCount, validCount, invalidTwoCount, validTwoCount, len(validationCommittee))
+		// fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nInvalid Two Count: %d\nValid Two Count: %d\nCommittee size: %d\n", invalidCount, validCount, invalidTwoCount, validTwoCount, len(validationCommittee))
 	} else {
-		fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nCommittee size: %d\n", invalidCount, validCount, len(validationCommittee))
+		// fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nCommittee size: %d\n", invalidCount, validCount, len(validationCommittee))
 	}
 
 	//chain is forked
@@ -1110,7 +1110,7 @@ func balanceReputationNextTimeSlot() {
 		}
 	}
 
-	fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nCommittee size: %d\n", invalidCount, validCount, len(delegates))
+	// fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nCommittee size: %d\n", invalidCount, validCount, len(delegates))
 
 	//add block if majority believe block is valid
 	isValid := validCount > len(delegates)/2
@@ -1279,9 +1279,9 @@ func nextReputationTimeSlot() {
 	}
 	// fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nCommittee size: %d\n", invalidCount, validCount, len(validationCommittee))
 	if currAttack == "network_partition" && (forked || evilProposer) {
-		fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nInvalid Two Count: %d\nValid Two Count: %d\nCommittee size: %d\n", invalidCount, validCount, invalidTwoCount, validTwoCount, len(delegates))
+		// fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nInvalid Two Count: %d\nValid Two Count: %d\nCommittee size: %d\n", invalidCount, validCount, invalidTwoCount, validTwoCount, len(delegates))
 	} else {
-		fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nCommittee size: %d\n", invalidCount, validCount, len(delegates))
+		// fmt.Printf("Voting results\nInvalid Count: %d\nValid Count: %d\nCommittee size: %d\n", invalidCount, validCount, len(delegates))
 	}
 
 	//chain is forked
