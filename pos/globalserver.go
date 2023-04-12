@@ -502,22 +502,22 @@ func printInfo() {
 	// }
 
 	//prints Validator balances
-	println("Validator balances")
-	for _, validator := range validators {
-		fmt.Printf("%s: %f, %d, Evil: %t \n", validator.Address[:3], validator.Stake, validator.committeeCount, validator.IsMalicious)
-		printString := ""
-		for _, block := range validator.Blockchain {
-			printString += "->["
-			for _, transaction := range block.Transactions {
-				printString += fmt.Sprintf("%d,", transaction.ID)
-			}
-			printString = printString[:len(printString)-1]
-			printString += "]"
-		}
-		printString = printString[1:]
-		fmt.Printf("VALIDATOR %s BLOCKCHAIN\n", validator.Address[:3])
-		println(printString)
-	}
+	// println("Validator balances")
+	// for _, validator := range validators {
+	// 	fmt.Printf("%s: %f, %d, Evil: %t \n", validator.Address[:3], validator.Stake, validator.committeeCount, validator.IsMalicious)
+	// 	printString := ""
+	// 	for _, block := range validator.Blockchain {
+	// 		printString += "->["
+	// 		for _, transaction := range block.Transactions {
+	// 			printString += fmt.Sprintf("%d,", transaction.ID)
+	// 		}
+	// 		printString = printString[:len(printString)-1]
+	// 		printString += "]"
+	// 	}
+	// 	printString = printString[1:]
+	// 	fmt.Printf("VALIDATOR %s BLOCKCHAIN\n", validator.Address[:3])
+	// 	println(printString)
+	// }
 
 	//prints Forked group
 	// if currAttack == "network_partition" {
