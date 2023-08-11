@@ -8,7 +8,8 @@ Security is a fundamental issue in blockchains, as it ensures
 the integrity of the blockchain, the accuracy of transactions, and the trust of users. This paper presents the design and implementation of our Proof of Stake (PoS) blockchain simulation to test different security strategies against various attacks. PoS is a consensus mechanism used in blockchain networks as an alternative to the traditional Proof of Work (PoW) mechanism. In PoS, validators are selected to validate blocks and secure the network based on the amount of cryptocurrency they hold and "stake" as collateral. A common malicious behavior is double spending, where the same funds are used for multiple different transactions. Attacks on the blockchain that give the dishonest user opportunities to conduct fraudulent activities like double spending compromise the accuracy of transactions. Our simulation supports a few different methods of enhancing blockchain security, including the standard PoS consensus,slashing of misbehaving validators, and reputation based PoS. There are a couple of attacks that can be simulated: network partition and balance attack. We report the measurements about how the different strategies for blockchain security perform against our simulated attacks.
 
 ## Installation
-Run `go get ./...`
+
+Clone repo and run `go get ./...` to install dependencies
 
 ## Simulation
 
